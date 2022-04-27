@@ -26,7 +26,7 @@ from pathlib import Path
 duplicates = {}
 
 
-def process_duplicates(entry: FileCleaner, new_path: str) -> bool:
+def process_duplicates(entry: FileCleaner) -> bool:
     """
     Do some duplicate processing.   We have two kinds of folders,  managed (a name) and unmanaged (a date).  If we
     find the new file was going into a unmanaged directory and we have a managed version,  we just want to keep that
@@ -101,11 +101,10 @@ def process_file(entry: FileCleaner):
             logging.debug(f'Will not convert {entry.file}, {new_file} already exists')
         else:
             logging.debug(f'Going to covert {entry.file} to JPEG')
-            if entry.convert(conversion_type='JPEG', update_file=run_mode):  # converted file lives in original folder
+            if entry.convert(conversion_type='JPEG'):  # converted file lives in original folder
                 converted = True
                 new_path = entry.get_new_path(base=migrated)
-                if run_mode:
-                    entry.relocate_file(new_path, update=False)  # The original file has been preserved, we can work on new
+                entry.relocate_file(new_path, update=False)  # The original file has been preserved, we can work on new
                 # Now we will work on this new converted file
                 entry.file = Path(entry.conversion_filename("JPEG"))
                 preserve_file = entry.file
@@ -120,7 +119,7 @@ def process_file(entry: FileCleaner):
     # Now lets go about building our output directory
     new_path = entry.get_new_path(new_directory) if entry.date else entry.get_new_path(no_date)
 
-    if process_duplicates(entry, new_path):
+    if process_duplicates(entry):
         entry.relocate_file(new_path)
     else:
         entry.relocate_file(entry.get_new_path(duplicate))
@@ -184,7 +183,7 @@ if __name__ == '__main__':
     """
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hrpi:o:', ['input=', 'output='])
+        opts, args = getopt.getopt(sys.argv[1:], 'hpi:o:', ['input=', 'output='])
     except getopt.GetoptError:
         print(app_help)
         sys.exit(2)
@@ -193,8 +192,6 @@ if __name__ == '__main__':
         if opt == '-h':
             print(app_help)
             sys.exit(2)
-        elif opt == '-r':
-            run = True
         elif opt == '-p':
             preserve = True
         elif opt == '-i':
@@ -208,24 +205,21 @@ if __name__ == '__main__':
     ignored = f'{new_directory}{os.path.sep}Ignored'
     image_movies = f'{new_directory}{os.path.sep}ImageMovies'
 
-    run_mode = True if run else False
+    # Backup any previous attempts
+    if not preserve:
+        if os.path.exists(new_directory):
+            os.rename(new_directory, f'{new_directory}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
 
-    if run_mode:
-        # Backup any previous attempts
-        if not preserve:
-            if os.path.exists(new_directory):
-                os.rename(new_directory, f'{new_directory}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
-
-        os.mkdir(new_directory) if not os.path.exists(new_directory) else None
-        os.mkdir(no_date) if not os.path.exists(no_date) else None
-        os.mkdir(migrated) if not os.path.exists(migrated) else None
-        os.mkdir(duplicate) if not os.path.exists(duplicate) else None
-        os.mkdir(ignored) if not os.path.exists(ignored) else None
-        os.mkdir(image_movies) if not os.path.exists(image_movies) else None
+    os.mkdir(new_directory) if not os.path.exists(new_directory) else None
+    os.mkdir(no_date) if not os.path.exists(no_date) else None
+    os.mkdir(migrated) if not os.path.exists(migrated) else None
+    os.mkdir(duplicate) if not os.path.exists(duplicate) else None
+    os.mkdir(ignored) if not os.path.exists(ignored) else None
+    os.mkdir(image_movies) if not os.path.exists(image_movies) else None
 
     process_folder(FolderCleaner(master_directory, master_directory))
 
-    process_duplicates_movies(FolderCleaner(no_date, no_date))
+    process_duplicates_movies(FolderCleaner(Path(no_date), no_date))
 
     pass  # Set a breakpoint to see data structures
 

@@ -101,7 +101,7 @@ class FileCleaner:
     def conversion_filename(self, conversion_type: str = "JPEG") -> str:
         return f'{self.just_path}.{self.conversion_dict[conversion_type]}'
 
-    def convert(self, conversion_type: str = "JPEG", update_file: bool = True) -> bool:
+    def convert(self, conversion_type: str = "JPEG") -> bool:
         """
 
         Convert the existing file,  and save the results in new_path
