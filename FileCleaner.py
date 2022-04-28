@@ -113,7 +113,7 @@ class FileCleaner:
         if self.file.suffix and self.file.suffix in self.files_to_convert:
             logging.debug(f'Convert {self.file} to {conversion_type}')
             if self.file.suffix == '.HEIC':
-                return self._heif_to_jpg(conversion_type, update_file)
+                return self._heif_to_jpg(conversion_type)
             else:
                 assert False, f'Unable to support conversion for type {self.file.suffix}'
 
@@ -179,7 +179,7 @@ class FileCleaner:
         self._make_new_path(Path(new))
         return new
 
-    def _heif_to_jpg(self, conversion_type: str = "JPEG", update_file: bool = True) -> bool:
+    def _heif_to_jpg(self, conversion_type: str = "JPEG") -> bool:
         """
         :param conversion_type:  Only JPEG for now
         :param update_file: boolean True will make a copy,  False will just do the work (used for testing)
@@ -219,8 +219,7 @@ class FileCleaner:
         if exif_dict:
             exif_bytes = piexif.dump(exif_dict)
             new_name = f'{self.just_path}.{self.conversion_dict[conversion_type]}'
-            if update_file:
-                image.save(new_name, format(conversion_type), exif=exif_bytes)
+            image.save(new_name, format(conversion_type), exif=exif_bytes)
         return True
 
     @property

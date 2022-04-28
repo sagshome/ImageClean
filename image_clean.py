@@ -1,4 +1,4 @@
-# This is a sample Python script.
+# Driver program for restructuring image files.
 import getopt
 import logging
 import os
@@ -12,18 +12,22 @@ from datetime import datetime
 from pathlib import Path
 
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+duplicates = {}  # This hash is used to store processed files so we can detect increments
 
-# JVaEmRy2S4OwlOwRuUxQQg
-# F:\pictures\2014\03\12\20140312-161503\NgDEfEunTpyOpek0X1mOTQ
 
-# Exiv2 Image data standards
-# Exif[36867] - Date Take
-# 0th[270] - Description
-# Exif[37510 - Description (from shotwell) - piexif.ExifIFD.UserComment
+def populate_duplicates(output: Path):
+    for entry in output.iterdir():
+        if entry.is_dir():
+            populate_duplicates(entry)
+        else:
+            existing = FileCleaner(entry)
+            key_name = existing.file.name.upper()
 
-duplicates = {}
+            if key_name not in duplicates:
+                duplicates[key_name] = []
+                duplicates[key_name].append(existing)
+            else:
+                duplicates[key_name].append(existing)
 
 
 def process_duplicates(entry: FileCleaner) -> bool:
@@ -86,7 +90,7 @@ def process_duplicates_movies(movie_dir):
 
 def process_file(entry: FileCleaner):
     if entry.file.suffix not in entry.all_pictures:  # todo: why not have other processing like documents?
-        entry.relocate_file(entry.get_new_path(ignored))
+        entry.relocate_file(entry.get_new_path(ignored)) if ignored else None
         return
     if not entry.is_valid:
         logging.debug(f'Invalid file {entry.file}')
@@ -103,8 +107,9 @@ def process_file(entry: FileCleaner):
             logging.debug(f'Going to covert {entry.file} to JPEG')
             if entry.convert(conversion_type='JPEG'):  # converted file lives in original folder
                 converted = True
-                new_path = entry.get_new_path(base=migrated)
-                entry.relocate_file(new_path, update=False)  # The original file has been preserved, we can work on new
+                if migrated:
+                    new_path = entry.get_new_path(base=migrated)
+                    entry.relocate_file(new_path, update=False)  # The original has been preserved, we can work on new
                 # Now we will work on this new converted file
                 entry.file = Path(entry.conversion_filename("JPEG"))
                 preserve_file = entry.file
@@ -122,7 +127,7 @@ def process_file(entry: FileCleaner):
     if process_duplicates(entry):
         entry.relocate_file(new_path)
     else:
-        entry.relocate_file(entry.get_new_path(duplicate))
+        entry.relocate_file(entry.get_new_path(duplicate)) if duplicate else None
 
     if converted and preserve_file:
         os.unlink(preserve_file)
@@ -138,29 +143,24 @@ def process_folder(folder: FolderCleaner):
         elif entry.is_file():
             file_entry = FileCleaner(Path(entry))
             file_entry.parent = folder  # Allow me to back track
-
             process_file(file_entry)
 
-
-if platform.system() == 'Linux':
-    base_directory = '/shared'
-else:
-    base_directory = 'F:'
-
-master_directory = f'{base_directory}{os.path.sep}Pictures'
-new_directory = f'{base_directory}{os.path.sep}Photos'
 
 app_path = Path(sys.argv[0])
 app_name = app_path.name[:len(app_path.name) - len(app_path.suffix)]
 test = run = preserve = False
 
-app_help = f'{app_name}-hr -i <inputdir> -o <outputdir> \n' \
+app_help = f'{app_name}-hpdmj -o <output> input_folder\n' \
            f'Used to clean up directories.' \
            f'\n\n-h: This help' \
-           f'\n-r: Run the app (vs just verify)' \
-           f'\n-p: Preserve (append to) output directory' \
-           f'\n\n-i input folder - where to start the processing from' \
-           f'\n-o output directory - where to send the output to'
+           f'\n-r: Recreate the output directory' \
+           f'\n-d: Create a directory to store duplicate files' \
+           f'\n-m: Create a directory to store movie-clips that are also images (iphone live picture movies)' \
+           f'\n-j: Create a folder to store things we find that are not images, movies etc.' \
+           f'\n-s: Save original images that were successfully converted (HEIC) to JPG' \
+           f'\n\ninput folder - where to start the processing from' \
+           f'\n-o output directory - where to send the output to' \
+           f'\n\ninput folder - where to start the processing from' \
 
 log_file = f'{os.environ.get("HOME")}{os.path.sep}{app_name}.log'
 if os.path.exists(log_file):
@@ -183,39 +183,67 @@ if __name__ == '__main__':
     """
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hpi:o:', ['input=', 'output='])
+        opts, args = getopt.getopt(sys.argv[1:], 'hrdmjso:', ['input=', 'output='])
     except getopt.GetoptError:
         print(app_help)
         sys.exit(2)
 
+    preserve = True
+    keep_duplicates = False
+    keep_movie_clips = False
+    keep_junk_files = False
+    save_converted_files = False
+    new_directory = None
+
     for opt, arg in opts:
-        if opt == '-h':
+        if opt == '-h' or len(args) != 1:
             print(app_help)
             sys.exit(2)
-        elif opt == '-p':
-            preserve = True
-        elif opt == '-i':
-            master_directory = arg
+        elif opt == '-r':
+            preserve = False
+        elif opt == '-d':
+            keep_duplicates = True
+        elif opt == '-m':
+            keep_movie_clips = True
+        elif opt == '-j':
+            keep_junk_files = True
+        elif opt == '-s':
+            save_converted_files = True
         elif opt == '-o':
             new_directory = arg
 
+    master_directory = args[0]  # Tested this while process options
+    try:
+        os.stat(master_directory)
+    except FileNotFoundError:
+        print(app_help)
+        sys.exit(2)
+
+    if not new_directory:
+        new_directory = master_directory  # Going to update in place
+
+    if new_directory == master_directory:
+        preserve = True
+
     no_date = f'{new_directory}{os.path.sep}NoDate'
-    migrated = f'{new_directory}{os.path.sep}Migrated'
-    duplicate = f'{new_directory}{os.path.sep}Duplicates'
-    ignored = f'{new_directory}{os.path.sep}Ignored'
-    image_movies = f'{new_directory}{os.path.sep}ImageMovies'
+    migrated = f'{new_directory}{os.path.sep}Migrated' if save_converted_files else None
+    duplicate = f'{new_directory}{os.path.sep}Duplicates' if keep_duplicates else None
+    ignored = f'{new_directory}{os.path.sep}Ignored' if keep_junk_files else None
+    image_movies = f'{new_directory}{os.path.sep}ImageMovies' if keep_movie_clips else None
 
     # Backup any previous attempts
-    if not preserve:
+    if preserve:
+        populate_duplicates(Path(new_directory))
+    else:
         if os.path.exists(new_directory):
             os.rename(new_directory, f'{new_directory}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
 
     os.mkdir(new_directory) if not os.path.exists(new_directory) else None
     os.mkdir(no_date) if not os.path.exists(no_date) else None
-    os.mkdir(migrated) if not os.path.exists(migrated) else None
-    os.mkdir(duplicate) if not os.path.exists(duplicate) else None
-    os.mkdir(ignored) if not os.path.exists(ignored) else None
-    os.mkdir(image_movies) if not os.path.exists(image_movies) else None
+    os.mkdir(migrated) if migrated and not os.path.exists(migrated) else None
+    os.mkdir(duplicate) if duplicate and not os.path.exists(duplicate) else None
+    os.mkdir(ignored) if ignored and not os.path.exists(ignored) else None
+    os.mkdir(image_movies) if image_movies and not os.path.exists(image_movies) else None
 
     process_folder(FolderCleaner(master_directory, master_directory))
 
