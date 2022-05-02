@@ -4,6 +4,10 @@ import re
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, TypeVar
+
+
+FolderCT = TypeVar("FolderCT", bound="FileCleaner")
 
 
 class FolderCleaner:
@@ -11,101 +15,112 @@ class FolderCleaner:
     A class for processing folders,  going to use it to load a default time for files in this directory
     """
 
-    folder_hash = {}
+    def __init__(self, path_entry: Path, root_directory: Path = None, parent: FolderCT = None):
 
-    def __init__(self, path_entry: Path, root_directory: str):
-        if not isinstance(path_entry, Path):
-            path_entry = Path(path_entry)
+        self.path: Path = path_entry
+        self.root_directory: Path = root_directory
 
-        self.path = path_entry
-        self.year = None
-        self.month = None
-        self.date = None
-        self.description = None
-        self.parent = None
-        self.root_directory = root_directory
-        try:
-            self.stat = os.stat(path_entry)
-        except FileNotFoundError:
-            self.stat = {'st_size': 0}
+        self.folder_time: Optional[datetime] = None
+        self.description: Optional[str] = None
+        self.parent: Optional[FolderCT] = parent
 
-        self.set_metadata_from_path_name(self.root_directory)
-        descriptions = re.match('^([-_ ]*)(.*)', self.description) if self.description else None
-        self.description = descriptions.groups()[1] if descriptions else None
-        self.content_dates = []
-        self.files = []
+        self.folder_time = self.get_date_from_path()  # A lot of re stuff, so just cache the value.
+        self.description = self.get_description_from_path()
 
-    @property
-    def default_date(self):
-        if not self.year:
-            return None
-        month = self.month if self.month else 1
-        day = self.date if self.date else 1
-        return datetime(self.year, month, day)
-
-    def _set_folder_date_and_description(self,  regexp: str,  date_format: str, array_max: int):
-        """
-        This will set the date values (year, month, date) and the description based on regular expression
-        parsing and datetime formatting.
-
-        :param regexp:  The RE to pull the date values and description
-        :param date_format:  The date format to use based on the RE
-        :param array_max:  The number of elements to process for the date format
-        :return:
-        """
+    def _get_date_from_path_name(self, regexp: str,  date_format: str, array_max: int) -> Optional[datetime]:
         re_parse = re.match(regexp, self.path.name)
         if re_parse:
             re_array = re_parse.groups()
             date_string = "".join(re_array[0:array_max])
             try:
-                dates = datetime.strptime(date_string, date_format)
-                self.year = dates.year
-                self.month = dates.month if array_max >= 2 else None  # Since strptime will stick in 1 if no month
-                self.date = dates.day if array_max == 3 else None  # Since strptime will stick in 1 in no date
-                self.description = re_array[array_max].rstrip().lstrip()
+                return datetime.strptime(date_string, date_format)
             except ValueError:
                 logging.debug(f'Could not convert {date_string} of {self.path.name} to a date')
+        return None
 
-    def set_metadata_from_path_name(self, master_directory):
-        """
-        Try and get a Year/Month/Date from the structure
-        formats:
-        DD-MMM-YYYY
-        DD-MMM-YYYY - description
-        YYYY_MM - description
-        YYYY_MM_DD - description
-        YYYY_MM_DDdescription
-        YYYY-Description
-        """
+    def _get_description_from_path_name(self, regexp: str, array_max: int) -> Optional[str]:
+        re_parse = re.match(regexp, self.path.name)
+        if re_parse:
+            re_array = re_parse.groups()
+            return re_array[array_max].rstrip().lstrip()
+        return None
 
-        if master_directory == str(self.path):
-            return
-        self._set_folder_date_and_description('^([0-9]{4}).([0-9]{2}).([0-9]{2})(.*)', '%Y%m%d', 3)
-        if not self.year:
-            self._set_folder_date_and_description('^([0-9]{2}).([a-zA-Z]{3}).([0-9]{4})(.*)', '%d%b%Y', 3)
-        if not self.year:
-            self._set_folder_date_and_description('^([0-9]{4}).([0-9]{2})(.+)', '%Y%m', 2)
-        if not self.year:
-            self._set_folder_date_and_description('^([0-9]{4})(.+)', '%Y%m', 1)
-        if not self.year:
-            self._set_folder_date_and_description('^([0-9]{8})-([0-9]{6})(.*)', '%Y%m%d-%H%M%S', 3)
-        if not self.year:
+    def get_date_from_path(self) -> Optional[datetime]:
+        parser_values = [
+            ['^([0-9]{4}).([0-9]{2}).([0-9]{2})(.*)', '%Y%m%d', 3],
+            ['^([0-9]{2}).([a-zA-Z]{3}).([0-9]{4})(.*)', '%d%b%Y', 3],
+            ['^([0-9]{4}).([0-9]{2})(.+)', '%Y%m', 2],
+            ['^([0-9]{4})(.+)', '%Y%m', 1],
+            ['^([0-9]{8})-([0-9]{6})(.*)', '%Y%m%d%H%M%S', 3]
+        ]
+
+        for exp, fmt, index in parser_values:
+            folder_date = self._get_date_from_path_name(exp, fmt, index)
+            if folder_date:
+                return folder_date
+
+        parse_tree = re.match('.*([0-9]{4}).([0-9]{1,2}).([0-9]{1,2})$', str(self.path))
+        if parse_tree:
             try:
-                int(self.path.name)  # Already parsed by something - we can do it again
-            except ValueError:
-                # Weird clause - some program imported using derived garbage names
-                if not ((len(self.path.name) == 21 or len(self.path.name) == 22) and self.path.name.find(' ') == -1):
-                    if not re.match('^[0-9]{8}-[0-9]{6}', self.path.name):  # A time stamp so forget it.
-                        self.description = self.path.name
+                return datetime(int(parse_tree.groups()[0]),
+                                int(parse_tree.groups()[1]),
+                                int(parse_tree.groups()[2]))
 
-    def recursive_description_lookup(self, current_description: str) -> str:
+            except ValueError:
+                pass
+
+        # Use the parent date
+        parent = self.parent
+        while parent:
+            if parent.folder_time:
+                return self.parent.folder_time
+            parent = parent.parent
+        return None
+
+    def get_description_from_path(self) -> Optional[str]:
+
+        parser_values = [
+            '^[0-9]{4}.[0-9]{2}.[0-9]{2}(.*)',
+            '^[0-9]{2}.[a-zA-Z]{3}.[0-9]{4}(.*)',
+            '^[0-9]{4}.[0-9]{2}(.+)',
+            '^[0-9]{4}(.+)',
+            '^[0-9]{8}-[0-9]{6}(.*)',
+        ]
+
+        description = None
+        matched = False
+        for exp in parser_values:
+            re_parse = re.match(exp, self.path.name)
+            if re_parse:
+                description = re_parse.groups()[0]
+                matched = True
+                break
+
+        if not description and not matched:
+            # Weird clause - some program imported using derived garbage names
+            if not ((len(self.path.name) == 21 or len(self.path.name) == 22) and self.path.name.find(' ') == -1):
+                if not re.match('^[0-9]{8}-[0-9]{6}', self.path.name):  # A time stamp so forget it.
+                    try:
+                        int(self.path.name)  # a piece of a date folder tree yyyy/mm/dd
+                    except ValueError:
+                        description = self.path.name
+
+        if description:  # Cleanup some junk
+            parts = re.match('^([-_ ]*)(.*)', description)
+            description = parts.groups()[1]
+        return description
+
+    def recursive_description_lookup(self, current_description: str, to_exclude) -> str:
         """
         Recurse your parents to build up path based on descriptive folder names
         :param current_description:  a string with the build up path
+        :param to_exclude: an array of path components that we don't want to include in description tree
+
         :return: a string with the path name based on os.path.sep and the various folder levels
         """
         if self.description:
-            current_description = f'{os.path.sep}{self.description}{current_description}'
+            if self.description not in to_exclude:
+                current_description = f'{os.path.sep}{self.description}{current_description}'
             if self.parent:
-                current_description = self.parent.recursive_description_lookup(current_description)
+                current_description = self.parent.recursive_description_lookup(current_description, to_exclude)
         return current_description
