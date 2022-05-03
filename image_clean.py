@@ -151,7 +151,10 @@ def process_folder(folder: FolderCleaner):
     print(f'Folder: {folder.path}') if verbose else None
     for entry in folder.path.iterdir():
         if entry.is_dir():
-            process_folder(FolderCleaner(Path(entry), folder.root_directory, folder))
+            this_folder = FolderCleaner(Path(entry), folder.root_directory, folder)
+            if this_folder.description in bad_parents:
+                this_folder.description = None
+            process_folder(this_folder)
         elif entry.is_file():
             process_file(FileCleaner(Path(entry), folder=folder))
 
