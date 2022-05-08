@@ -22,8 +22,12 @@ def custom_folder(folder: Path) -> bool:
     .../foo/bar is NOT custom
     .../2012/3/3 is NOT managed
     """
-
-    return not re.match('^.*[0-9]{4}.[0-9]{1,2}.[0-9]{1,2}.+', str(folder))
+    folder = str(folder)
+    if not re.match('^.*[0-9]{4}.[0-9]{1,2}.[0-9]{1,2}.+', folder):
+        if not folder == str(new_directory):
+            if not folder.startswith(str(no_date)):
+                return True
+    return False
 
 
 def populate_duplicates(input_dir: FolderCleaner, base: Path):
@@ -32,7 +36,7 @@ def populate_duplicates(input_dir: FolderCleaner, base: Path):
             folder = FolderCleaner(entry, base)
             populate_duplicates(folder, base)
         else:
-            if not entry == new_directory:  # If this was previously processed it would not be here
+            if not entry == base:  # If this was previously processed it would not be here
                 existing = FileCleaner(entry, input_dir)
                 existing.register()
 
@@ -58,24 +62,29 @@ def process_duplicates(entry: FileCleaner) -> bool:
         existing_custom = custom_folder(existing.file.parent)
         new_custom = custom_folder(new_path)
         if existing_custom and not new_custom:
-            return False  # We are a duplicate and the existing file has precedence
+            return False  # We are a duplicate and the existing file has custom precedence
         elif not existing_custom and new_custom:
             os.unlink(existing.file)
             existing.de_register()
             # todo: maybe we should move this to duplicates to
             return True  # We are custom and the existing was not,  cleanup and continue
         elif existing_custom and new_custom:  # The exact same file but in different paths .../family,  .../picnics
+            logging.debug(f'Custom folders exist for {entry.file} and {existing.file} ({new_path}')
             return False  # First in wins   (alternately we could save both)
-        elif not existing_custom and not new_custom:  # This should be impossible without human finger issues
-            if existing.parent.date < entry.folder.folder_time or existing.entry.date == entry.folder.folder_time:
+        elif not existing_custom and not new_custom:  # For some reason,  two copies in non-managed folders
+            existing_date = existing.folder.folder_time if existing.folder else datetime.now()
+            entry_date = entry.date
+            if not entry_date:
+                entry_date = entry.folder.folder_time if entry.folder and entry.folder.folder_time else datetime.now()
+            if existing_date <= entry_date:
                 return False
-            elif existing.parent.date > entry.folder.folder_time:
+            elif existing_date > entry.date:
                 os.unlink(existing.file)
                 existing.de_register()
                 return True  # We are custom and the existing was not,  cleanup and continue
 
-    if entry.is_registered(by_path=True, by_file=False, alternate_path=new_path):  # Same name, same path, different
-        entry.get_registered(by_path=True, by_file=False, alternate_path=new_path).rollover_name()
+    if entry.is_registered(by_file=False, by_path=True, alternate_path=new_path):  # Same name, same path, different
+        dup = FileCleaner(f'{new_path}{os.path.sep}{entry.file.name}').rollover_name()
         return True
     return True
 
@@ -100,6 +109,15 @@ def process_duplicates_movies(movie_dir):
                         break
 
 
+def delete_empty_folders(path: Path):
+    for entry in path.iterdir():
+        if entry.is_dir():
+            delete_empty_folders(entry)
+            if not os.listdir(entry):
+                print(f'  Removing empty directory {entry}') if verbose else None
+                os.rmdir(entry)
+
+
 def process_file(entry: FileCleaner):
     print(f'.. File: {entry.file}') if verbose else None
     if entry.file.suffix not in entry.all_pictures:  # todo: why not have other processing like documents?
@@ -117,7 +135,6 @@ def process_file(entry: FileCleaner):
         if os.path.exists(new_file):
             logging.debug(f'Will not convert {entry.file}, {new_file} already exists')
         else:
-            logging.debug(f'Going to covert {entry.file} to JPEG')
             if entry.convert(conversion_type='JPEG'):  # converted file lives in original folder
                 converted = True
                 if migrated:
@@ -150,7 +167,7 @@ def process_file(entry: FileCleaner):
 def process_folder(folder: FolderCleaner):
     print(f'Folder: {folder.path}') if verbose else None
     for entry in folder.path.iterdir():
-        if entry.is_dir():
+        if entry.is_dir() and entry not in ignore_folders:
             this_folder = FolderCleaner(Path(entry), folder.root_directory, folder)
             if this_folder.description in bad_parents:
                 this_folder.description = None
@@ -179,13 +196,17 @@ app_help = f'{app_name} -hpdmjPV -i <ignore_this_folder> -n <non_description_fol
            f'just want to ignore the parent,  example folder "Camera Uploads' \
            f'\n\ninput folder - where to start the processing from' \
 
+
 log_file = f'{os.environ.get("HOME")}{os.path.sep}{app_name}.log'
+FileCleaner(Path(log_file), None).rollover_name(register=False)
+
 if os.path.exists(log_file):
     os.remove(log_file)
 print(f'logging to...{log_file}')
 
 logging.basicConfig(filename=log_file,
-                    format='%(levelname)s:%(asctime)s:%(levelno)s:%(message)s',
+                    # format='%(levelname)s:%(asctime)s:%(levelno)s:%(message)s',
+                    format='%(levelname)s:%(levelno)s:%(message)s',
                     level=logging.DEBUG)
 
 if __name__ == '__main__':
@@ -269,6 +290,11 @@ if __name__ == '__main__':
         preserve = True
         in_place = True
 
+    ignore_folders.append(Path(f'{new_directory}{os.path.sep}Migrated'))
+    ignore_folders.append(Path(f'{new_directory}{os.path.sep}Duplicates'))
+    ignore_folders.append(Path(f'{new_directory}{os.path.sep}Ignored'))
+    ignore_folders.append(Path(f'{new_directory}{os.path.sep}ImageMovies'))
+
     no_date = Path(f'{new_directory}{os.path.sep}NoDate')
     migrated = Path(f'{new_directory}{os.path.sep}Migrated') if save_converted_files else None
     duplicate = Path(f'{new_directory}{os.path.sep}Duplicates') if keep_duplicates else None
@@ -295,6 +321,8 @@ if __name__ == '__main__':
     process_folder(master)
 
     process_duplicates_movies(FolderCleaner(Path(no_date), no_date))
+
+    delete_empty_folders(new_directory)
 
     pass  # Set a breakpoint to see data structures
 

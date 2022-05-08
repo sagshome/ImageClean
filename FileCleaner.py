@@ -160,7 +160,7 @@ class FileCleaner:
                 self.duplicate_hash[key] = new_list
 
     def is_registered(self, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) -> bool:
-        value = self.get_registered(by_path=by_path, by_file=by_file, alternate_path=alternate_path)
+        value = self.get_registered(by_file=by_file, by_path=by_path, alternate_path=alternate_path)
         if value:
             return True
         return False
@@ -174,23 +174,54 @@ class FileCleaner:
                 self.duplicate_hash[key] = []
             self.duplicate_hash[key].append(self)
 
+    @staticmethod
+    def un_register(file_path: Path):
+
+        entity = FileCleaner(file_path)
+        duplicate = entity.get_registered(by_path=True, by_file=False)
+        if duplicate:
+            duplicate.de_register()
+        else:
+            logging.error(f'Try to un_register {file_path}(not registered)')
+
+    @staticmethod
+    def re_register(old_path: Path, new_path: Path):
+        entity = FileCleaner(old_path)
+        entity = entity.get_registered(by_path=True, by_file=False)
+        if entity:
+            entity.de_register()
+            entity.file = new_path
+            entity.register()
+        else:
+            logging.error(f'Try to re_register {old_path}(not registered) with {new_path}')
+
     def get_registered(self, by_path: bool = False, by_file: bool = False, alternate_path: Path = None)\
             -> Optional[FileCT]:
         key = self.file.name.upper()
         new_path = alternate_path if alternate_path else self.file.parent
         if key in self.duplicate_hash:
             for entry in self.duplicate_hash[key]:
-                found_file = False if by_file and not cmp(entry.file, self.file) else True
-                found_path = False if by_path and not entry.file.parent == new_path else True
+                if by_file:
+                    logging.debug(f'Comparing {entry.file} to {self.file}')
+                    try:
+                        found_file = cmp(entry.file, self.file)
+                    except:
+                        pass
+                else:
+                    found_file = True
+                if by_path:
+                    found_path = str(entry.file.parent) == str(new_path)
+                else:
+                    found_path = True
                 if found_path and found_file:
                     return entry
 
-        key = self.file.name.upper()
-        new_path = new_path if new_path else self.file.parent
-        if key in self.duplicate_hash:
-            for entry in self.duplicate_hash[key]:
-                if entry.file.parent == new_path:
-                    return entry
+        # todo:   This is bug,  not sure why I had it here
+        # new_path = new_path if new_path else self.file.parent
+        # if key in self.duplicate_hash:
+        #     for entry in self.duplicate_hash[key]:
+        #         if entry.file.parent == new_path:
+        #             return entry
         return None
 
     def get_new_path(self, base: Path, invalid_parents=None) -> Path:
@@ -209,15 +240,15 @@ class FileCleaner:
         if not self.date and not self.folder.folder_time:
             return Path(f'{base}{os.path.sep}{description}')
 
-        # Tough call,  but I trust humans - if the folder had a date it in,  trust it else trust the image
-        if self.folder and self.folder.folder_time:
-            year = self.folder.folder_time.year
-            month = self.folder.folder_time.month
-            day = self.folder.folder_time.day
-        else:
+        # Bug... all folders have a time.
+        if self.date:
             year = self.date.year
             month = self.date.month
             day = self.date.day
+        elif self.folder and self.folder.folder_time:
+            year = self.folder.folder_time.year
+            month = self.folder.folder_time.month
+            day = self.folder.folder_time.day
 
         new = str(base)
         if year and description:
@@ -368,17 +399,32 @@ class FileCleaner:
         if update:
             self.file = new  # In case this entry is used again,  point to the new location.
 
-    def rollover_name(self):
-        basename = self.file.name[:len(self.file.name) - len(self.file.suffix)]
-        found = False
-        for increment in range(100):  # More then 100 copies !  die
-            new = f'{self.file.parent}{os.path.sep}{basename}_{increment}{self.file.suffix}'
-            if os.path.exists(new):
-                continue
-            os.rename(self.file, new)
-            found = True
-            break
-        assert found, f"Duplicate name update exceeded for {self.file}"
+    def rollover_name(self, register=True):
+        """
+        Allow up to 20 copies of a file before removing the oldest
+        file.type
+        file_0.type
+        file_1.type
+        etc
+        :return:
+        """
+
+        if os.path.exists(self.file):
+            logging.debug(f'Rolling over {self.file}')
+
+            basename = self.file.name[:len(self.file.name) - len(self.file.suffix)]
+            for increment in reversed(range(20)):
+                old_path = f'{self.file.parent}{os.path.sep}{basename}_{increment}{self.file.suffix}'
+                new_path = f'{self.file.parent}{os.path.sep}{basename}_{increment+1}{self.file.suffix}'
+                if os.path.exists(old_path):
+                    if os.path.exists(new_path):
+                        os.unlink(new_path)
+                        self.un_register(Path(old_path)) if register else None
+                    os.rename(old_path, new_path)
+                    self.re_register(Path(old_path), Path(new_path)) if register else None
+            os.rename(self.file, f'{self.file.parent}{os.path.sep}{basename}_0{self.file.suffix}')
+            if register:
+                self.re_register(self.file, Path(f'{self.file.parent}{os.path.sep}{basename}_0{self.file.suffix}'))
 
     @staticmethod
     def _make_new_path(path: Path):
