@@ -27,8 +27,7 @@ def register_files(input_dir: Path, base: Path):
                 register_files(entry, base)
         else:
             if not entry.parent == base:  # If this was previously processed it would not be here
-                existing = FileCleaner(entry, FolderCleaner(input_dir))
-                existing.register()
+                file_cleaner(entry, FolderCleaner(input_dir)).register()
 
 
 def duplicate_get(entry: Union[ImageCleaner, FileCleaner]) -> Optional[Union[ImageCleaner, FileCleaner]]:
@@ -64,18 +63,26 @@ def duplicates_test(entry: Union[ImageCleaner, FileCleaner]) -> int:
                     return GREATER_FILE
                 elif entry.folder < value.folder:
                     return LESSER_FILE
+
                 # Lets use the file date
                 if entry.date == value.date:
+                    # assert False, "todo: On restart entry.folder.date will be nothing if it was the root"
                     if entry.folder.date == value.folder.date:
                         return EXACT_FILE
-                    elif entry.folder.date < value.folder.date:
+                    elif entry.folder.date and value.folder.date:
+                        if entry.folder.date < value.folder.date:
+                            return GREATER_FILE
+                        elif entry.folder.date > value.folder.date:
+                            return LESSER_FILE
+                    if entry.folder.date and not value.folder.date:
                         return GREATER_FILE
-                    else:
+                    if not entry.folder.date and value.folder.date:
                         return LESSER_FILE
                 elif entry.date < value.date:
                     return GREATER_FILE
                 else:
                     return LESSER_FILE
+                return EXACT_FILE
     return result
 
 
@@ -128,7 +135,7 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
         logging.debug(f'Invalid file {entry.path}')
         return
 
-    migration_path = entry.get_new_path(base=migrated_path) if keep_converted_file else None
+    migration_path = entry.get_new_path(base=migrated_path) if keep_converted_files else None
     new_entry = entry.convert(migration_path, remove=keep_original_files and not in_place)
     if id(new_entry) != id(entry):  # The file was converted and cleaned up
         entry = new_entry  # work on the converted file
@@ -157,10 +164,12 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
     elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
         existing = duplicate_get(entry)
         if dup_result in (LESSER_FILE, EXACT_FILE):
-            entry.relocate_file(entry.get_new_path(duplicate_path), remove=not keep_original_files or in_place, create_dir=False, rollover=False)
+            entry.relocate_file(entry.get_new_path(duplicate_path), remove=not keep_original_files or in_place,
+                                create_dir=False, rollover=False)
         elif dup_result == GREATER_FILE:
-            existing.relocate_file(existing.get_new_path(duplicate_path), remove=not keep_original_files, create_dir=False, rollover=False)
-            entry.relocate_file(new_path, register=True, remove=(in_place or not safe_import), rollover=True)
+            existing.relocate_file(existing.get_new_path(duplicate_path), remove=not keep_original_files,
+                                   create_dir=False, rollover=False)
+            entry.relocate_file(new_path, register=True, remove=in_place, rollover=False)
     else:
         assert False, f'Invalid test result {dup_result}'
 
@@ -278,7 +287,7 @@ if __name__ == '__main__':
         elif opt == '-P':
             keep_duplicates = True
             keep_movie_clips = True
-            keep_converted_file = True
+            keep_converted_files = True
             keep_original_files = True
         else:
             print(f'Invalid option: {opt}\n\n')
@@ -306,7 +315,7 @@ if __name__ == '__main__':
 
     no_date_path = Path(f'{output_folder}{os.path.sep}{app_name}_NoDate')
     small_path = Path(f'{output_folder}{os.path.sep}{app_name}_Small')
-    migrated_path = Path(f'{output_folder}{os.path.sep}{app_name}_Migrated') if keep_converted_file else None
+    migrated_path = Path(f'{output_folder}{os.path.sep}{app_name}_Migrated') if keep_converted_files else None
     duplicate_path = Path(f'{output_folder}{os.path.sep}{app_name}_Duplicates') if keep_duplicates else None
     image_movies_path = Path(f'{output_folder}{os.path.sep}{app_name}_ImageMovies') if keep_movie_clips else None
 

@@ -46,6 +46,17 @@ if __name__ == '__main__':
             os.system(f'sort {result_file} > old')
 
             result = os.system(f'diff old new >> {log_file}')
+        if result == 0:
+            result = os.system(f'python3 {again} >> {log_file}')
+            if result == 0:
+                os.chdir(temp_output.name)
+                os.system(f'find . -type f > {temp_file}')
+
+                os.chdir(temp_file_dir.name)
+                os.system(f'sort {temp_file} > new')
+                os.system(f'sort {result_file} > old')
+
+                result = os.system(f'diff old new >> {log_file}')
 
     print(f'Completed {test_name} - {result}')
     os.chdir(start_dir)

@@ -101,7 +101,7 @@ class Cleaner:
             pass
         return False
 
-    @property
+    @cached_property
     def just_name(self) -> str:
         return self.path.name[:len(self.path.name) - len(self.path.suffix)]
 
@@ -109,6 +109,14 @@ class Cleaner:
     def just_path(self) -> str:
         full_path = str(self.path)
         return full_path[:len(full_path) - len(self.path.suffix)]
+
+    @cached_property
+    def registry_key(self) -> str:
+        target = self.just_name.upper()
+        parsed = re.match('(.+)_[0-9]+', target)
+        if parsed:
+            target = parsed.groups()[0]
+        return target
 
     @property
     def parent_folder(self) -> str:
@@ -131,23 +139,28 @@ class Cleaner:
             else:
                 self.duplicate_hash[key] = new_list
 
-    def is_registered(self, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) -> bool:
-        value = self.get_registered(by_file=by_file, by_path=by_path, alternate_path=alternate_path)
+    def is_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False,
+                      alternate_path: Path = None) -> bool:
+        value = self.get_registered(by_name=by_name, by_file=by_file, by_path=by_path, alternate_path=alternate_path)
         if value:
             return True
         return False
 
     def get_all_registered(self) -> List[FileCT]:
-        key = self.path.name.upper()
-        if key in self.duplicate_hash:
-            return self.duplicate_hash[key]
+        """
+        return a list of any Cleaner objects that match the name of this object.   If an item has been rolled over
+        it will have a _:digit" suffix on the name.   We will find those too
+        :return: List of FileCT objects (perhaps empty)
+        """
+        if self.registry_key in self.duplicate_hash:
+            return self.duplicate_hash[self.registry_key]
         return []
 
     def register(self):
         if self.is_registered(by_path=True, by_file=True):
             logging.error(f'Trying to re_register {self.path})')
         else:
-            key = self.path.name.upper()
+            key = self.registry_key
             if key not in self.duplicate_hash:
                 self.duplicate_hash[key] = []
             self.duplicate_hash[key].append(self)
@@ -162,12 +175,16 @@ class Cleaner:
         else:
             logging.error(f'Try to un_register {file_path}(not registered)')
 
-    def get_registered(self, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) \
+    def get_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) \
             -> Optional[FileCT]:
-        key = self.path.name.upper()
+
+        key = self.registry_key
         new_path = alternate_path if alternate_path else self.path.parent
         if key in self.duplicate_hash:
             for entry in self.duplicate_hash[key]:
+                found_name = self.path.name.upper() == entry.path.name.upper() if by_name else True
+                found_path = str(entry.path.parent) == str(new_path) if by_path else True
+
                 if by_file:
                     logging.debug(f'Comparing {entry.path} to {self.path}')
                     try:
@@ -176,11 +193,7 @@ class Cleaner:
                         found_file = False  # todo: This is for debugging - we should never have FileNotFound
                 else:
                     found_file = True
-                if by_path:
-                    found_path = str(entry.path.parent) == str(new_path)
-                else:
-                    found_path = True
-                if found_path and found_file:
+                if found_name and found_path and found_file:
                     return entry
         return None
 
@@ -192,6 +205,9 @@ class Cleaner:
         :invalid_parents: A list of strings components that should be excluded from any new path
         :return:  A Path representing where this file should be moved to
         """
+
+        if not base:
+            return None
 
         if not invalid_parents:
             invalid_parents = []
@@ -242,6 +258,10 @@ class Cleaner:
         directory does not exist abort!
         :return:
         """
+
+        if not path:
+            return
+
         if not os.path.exists(path):
             if create_dir:
                 self._make_new_path(path)
@@ -367,6 +387,12 @@ class FileCleaner(Cleaner):
         super().__init__(path_entry, folder)
 
     def __eq__(self, other: FileCT):
+        """
+        Compare non-image files
+        :param other:
+        :return:
+        """
+        # todo: This might be very slow
         return cmp(self.path, other.path, shallow=False)
 
     def __ne__(self, other):
@@ -418,7 +444,7 @@ class ImageCleaner(Cleaner):
         :param other: The other end of equal
         :return:
         """
-        if self.path.name == other.path.name and self.__class__ == other.__class__:
+        if self.__class__ == other.__class__:
             self.load_image_data()
             other.load_image_data()
             return self._image_data == other._image_data
@@ -467,7 +493,7 @@ class ImageCleaner(Cleaner):
             self.close_image()
         return small
 
-    @property
+    @cached_property
     def date(self):
         if not self._date:
             self._date = self.get_date_from_image()
@@ -716,7 +742,7 @@ class FolderCleaner(Cleaner):
                         return True
         return False
 
-    @property
+    @cached_property
     def date(self) -> Optional[datetime]:
         if not self._date:
             if not (len(self.path.name) == 22 and self.path.name.find(' ') == -1):  # Get rid of garbage first
