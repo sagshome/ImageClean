@@ -14,6 +14,9 @@ from PIL import Image, UnidentifiedImageError
 from shutil import copyfile
 from typing import List, Dict, Optional, TypeVar, Union
 
+logger = logging.getLogger('image_clean')
+
+
 IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
 SMALL_IMAGE = 360  # If width and height are less then this, it is thumb nail or some other derived file.
 
@@ -24,6 +27,7 @@ FolderCT = TypeVar("FolderCT", bound="FolderCleaner")
 
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
+    logger.debug(f'Go for it:{file}')
     if file.is_dir():
         return FolderCleaner(file, parent=folder)
     if file.suffix.upper() in IMAGE_FILES:
@@ -52,7 +56,6 @@ class Cleaner:
     def __init__(self, path_entry: Path, folder: FileCT = None):
 
         if not self.all_images:
-            logging.debug('updating CLASS values')
             for item in self.PICTURE_FILES:
                 self.all_images.append(item.upper())
                 self.all_images.append(item.lower())
@@ -113,7 +116,7 @@ class Cleaner:
     @cached_property
     def registry_key(self) -> str:
         target = self.just_name.upper()
-        parsed = re.match('(.+)_[0-9]+', target)
+        parsed = re.match('(.+)_[0-9]{1,2}$', target)
         if parsed:
             target = parsed.groups()[0]
         return target
@@ -127,7 +130,7 @@ class Cleaner:
         Remove yourself from the the list of registered FileClean objects
         """
         if not self.is_registered():
-            logging.error(f'Trying to remove non-existent {self.path}) from duplicate_hash')
+            logger.error(f'Trying to remove non-existent {self.path}) from duplicate_hash')
         else:
             new_list = []
             key = self.path.name.upper()
@@ -158,7 +161,7 @@ class Cleaner:
 
     def register(self):
         if self.is_registered(by_path=True, by_file=True):
-            logging.error(f'Trying to re_register {self.path})')
+            logger.error(f'Trying to re_register {self.path})')
         else:
             key = self.registry_key
             if key not in self.duplicate_hash:
@@ -173,7 +176,7 @@ class Cleaner:
         if duplicate:
             duplicate.de_register()
         else:
-            logging.error(f'Try to un_register {file_path}(not registered)')
+            logger.error(f'Try to un_register {file_path}(not registered)')
 
     def get_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) \
             -> Optional[FileCT]:
@@ -186,7 +189,7 @@ class Cleaner:
                 found_path = str(entry.path.parent) == str(new_path) if by_path else True
 
                 if by_file:
-                    logging.debug(f'Comparing {entry.path} to {self.path}')
+                    logger.debug(f'Comparing {key} {entry.path} to {self.path}')
                     try:
                         found_file = self == entry
                     except FileNotFoundError:
@@ -197,13 +200,13 @@ class Cleaner:
                     return entry
         return None
 
-    def get_new_path(self, base: Path, invalid_parents: Optional[List] = []) -> Path:
+    def get_new_path(self, base: Path, invalid_parents: Optional[List] = []) -> Optional[Path]:
         """
         Using the time stamp and current location build a folder path to where this
         file should be moved to.
         :param: base,  is the root folder to build the new path from
         :invalid_parents: A list of strings components that should be excluded from any new path
-        :return:  A Path representing where this file should be moved to
+        :return:  A Path representing where this file should be moved or None, if the base path was None
         """
 
         if not base:
@@ -266,18 +269,18 @@ class Cleaner:
             if create_dir:
                 self._make_new_path(path)
             else:
-                logging.debug(f'Create Dir is {create_dir},  not going to move {self.path.name} to {path}')
+                logger.debug(f'Create Dir is {create_dir},  not going to move {self.path.name} to {path}')
                 return
 
         new = Path(f'{path}{os.path.sep}{self.path.name}')
-        logging.debug(f'Copy {self.path} to {new}')
+        logger.debug(f'Copy {self.path} to {new}')
         if os.path.exists(new):
             if rollover:
-                logging.debug(f'Rolling over {new}')
+                logger.debug(f'Rolling over {new}')
                 self.rollover_name(new)
                 copyfile(str(self.path), new)
             else:
-                logging.debug(f'Will not overwrite {new}')
+                logger.debug(f'Will not overwrite {new}')
         else:
             copyfile(str(self.path), new)
         if remove:
@@ -305,7 +308,7 @@ class Cleaner:
                 try:
                     return datetime.strptime(date_string, date_format)
                 except ValueError:
-                    logging.debug(f'Could not convert {date_string} of {self.path.name} to a date')
+                    logger.debug(f'Could not convert {date_string} of {self.path.name} to a date')
             return None
 
         for exp, fmt, index in parser_values:
@@ -445,6 +448,9 @@ class ImageCleaner(Cleaner):
         :return:
         """
         if self.__class__ == other.__class__:
+            if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
+                return True
+            # Try the hard way
             self.load_image_data()
             other.load_image_data()
             return self._image_data == other._image_data
@@ -515,9 +521,9 @@ class ImageCleaner(Cleaner):
             try:
                 self._image = Image.open(self.path)
             except UnidentifiedImageError as e:
-                logging.debug(f'{self.path} - {e.strerror}')
+                logger.debug(f'{self.path} - {e.strerror}')
             except OSError as e:
-                logging.debug(f'{self.path} - {e.strerror}')
+                logger.debug(f'{self.path} - {e.strerror}')
         return self._image
 
     def load_image_data(self):
@@ -551,7 +557,7 @@ class ImageCleaner(Cleaner):
 
         new_name = f'{self.just_path}.jpg'
         if os.path.exists(new_name):
-            logging.debug(f'Will not convert {self.path} to {new_name} - It already exists')
+            logger.debug(f'Will not convert {self.path} to {new_name} - It already exists')
         else:
             heif_file = pyheif.read(self.path)
             image = Image.frombytes(heif_file.mode,
@@ -576,7 +582,7 @@ class ImageCleaner(Cleaner):
                     return ImageCleaner(Path(new_name), self.folder)
 
             except AttributeError as e:
-                logging.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
+                logger.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
         return self
 
     def update_image(self):
@@ -587,7 +593,7 @@ class ImageCleaner(Cleaner):
         changed = False
         try:
             exif_dict = piexif.load(str(self.path))
-            logging.debug(f'Update Image - success loading {self.path}')
+            logger.debug(f'Update Image - success loading {self.path}')
             if self._date:
                 new_date = self._date.strftime("%Y:%m:%d %H:%M:%S")
                 exif_dict['0th'][piexif.ImageIFD.DateTime] = new_date
@@ -599,9 +605,9 @@ class ImageCleaner(Cleaner):
                 piexif.insert(exif_bytes, str(self.path))
 
         except piexif.InvalidImageDataError:
-            logging.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
+            logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
         except FileNotFoundError:
-            logging.error(f'Failed to load {self.path} - File not Found')
+            logger.error(f'Failed to load {self.path} - File not Found')
 
     def get_date_from_image(self):
         """
@@ -630,14 +636,14 @@ class ImageCleaner(Cleaner):
                     date_value, _ = str(image_date, 'utf-8').split(' ')
                     return datetime.strptime(date_value, '%Y:%m:%d')
                 except ValueError:
-                    logging.debug(f'Corrupt date data {self.path}')
+                    logger.debug(f'Corrupt date data {self.path}')
             else:
-                logging.debug(f'Could not find a date in {self.path}')
+                logger.debug(f'Could not find a date in {self.path}')
 
         except piexif.InvalidImageDataError:
-            logging.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
+            logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
         except FileNotFoundError:
-            logging.debug(f'Failed to load {self.path} - File not Found')
+            logger.debug(f'Failed to load {self.path} - File not Found')
 
 
 class FolderCleaner(Cleaner):

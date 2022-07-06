@@ -35,7 +35,7 @@ def duplicate_get(entry: Union[ImageCleaner, FileCleaner]) -> Optional[Union[Ima
     for value in entry.get_all_registered():
         if entry == value:  # The image data is exactly the same
             return value
-    logging.error(f'Expecting to find a duplicate for {entry.path}')
+    logger.error(f'Expecting to find a duplicate for {entry.path}')
     return None
 
 
@@ -66,7 +66,6 @@ def duplicates_test(entry: Union[ImageCleaner, FileCleaner]) -> int:
 
                 # Lets use the file date
                 if entry.date == value.date:
-                    # assert False, "todo: On restart entry.folder.date will be nothing if it was the root"
                     if entry.folder.date == value.folder.date:
                         return EXACT_FILE
                     elif entry.folder.date and value.folder.date:
@@ -132,7 +131,7 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
     print(f'.. File: {entry.path}') if verbose else None
 
     if not entry.is_valid:
-        logging.debug(f'Invalid file {entry.path}')
+        logger.debug(f'Invalid file {entry.path}')
         return
 
     migration_path = entry.get_new_path(base=migrated_path) if keep_converted_files else None
@@ -143,7 +142,7 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
     if not process_all_files:
         if entry.path.suffix not in entry.all_images:
             if entry.path.suffix not in entry.all_movies:
-                logging.debug(f'Ignoring not image file {entry.path}')
+                logger.debug(f'Ignoring not image file {entry.path}')
                 return
 
     # Now lets go about building our output folder
@@ -156,7 +155,7 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
             new_path = entry.get_new_path(no_date_path)
 
     dup_result = duplicates_test(entry)
-    logging.debug(f'Duplicate Test: {dup_result} - {entry.path}')
+    logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
     if dup_result == NEW_FILE:  # We have not seen this file before
         entry.relocate_file(new_path, register=True, remove=not keep_original_files or in_place, rollover=True)
     elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
@@ -193,7 +192,7 @@ duplicate_path_base = f'{app_name}_Duplicates'
 movie_path_base = f'{app_name}_Clips'
 converted_path_base = f'{app_name}_Converted'
 
-app_help = f'{app_name} -hdmsaruPV -i <ignore_this_folder>... -n <non_description_folder>... -o <output> input_folder\n' \
+app_help = f'{app_name} -hdmsaruPV -i <ignore_folder>... -n <non_description_folder>... -o <output> input_folder\n' \
            f'Used to clean up directories.' \
            f'\n\n-h: This help' \
            f'\n-d: Save duplicate files into {duplicate_path_base}' \
@@ -211,13 +210,26 @@ app_help = f'{app_name} -hdmsaruPV -i <ignore_this_folder>... -n <non_descriptio
            f'\n\ninput folder - where to start the processing from' \
 
 
-log_file = f'{os.environ.get("HOME")}{os.path.sep}{app_name}.log'
-FileCleaner.rollover_name(Path(log_file))
+log_file = f'{os.environ.get("HOME")}{os.path.sep}.{app_name}.log'
+if os.path.exists(log_file) and os.stat(log_file).st_size > 100000:
+    FileCleaner.rollover_name(Path(log_file))
 
-logging.basicConfig(filename=log_file,
-                    # format='%(levelname)s:%(asctime)s:%(levelno)s:%(message)s',
-                    format='%(levelname)s:%(levelno)s:%(message)s',
-                    level=logging.DEBUG)
+debugging = os.getenv(f'{app_name.upper()}_DEBUG')
+logger = logging.getLogger(app_name)
+
+
+fh = logging.FileHandler(filename=log_file)
+fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
+fh.setFormatter(fh_formatter)
+logger.addHandler(fh)
+
+if debugging:
+    logger.setLevel(level=logging.DEBUG)
+    oh = logging.StreamHandler()
+    oh.setFormatter(fh_formatter)
+    logger.addHandler(oh)
+else:
+    logger.setLevel(level=logging.ERROR)
 
 if __name__ == '__main__':
     """
@@ -229,7 +241,8 @@ if __name__ == '__main__':
     5. Clean up duplicates
     
     """
-
+    start_time = datetime.now()
+    logger.debug(f'Starting {app_name} - {start_time}')
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hdmcsarPVo:i:n:', [])
     except getopt.GetoptError:
@@ -349,4 +362,4 @@ if __name__ == '__main__':
     process_duplicates_movies(FolderCleaner(Path(no_date_path), root_folder=no_date_path))
     suspicious_folders = audit_folders(output_folder)
     # todo: roll back small files that are unique
-    logging.debug('Completed')
+    logger.debug(f'Completed ({datetime.now() - start_time}')

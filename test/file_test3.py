@@ -3,7 +3,7 @@
 Create an archive for testing
 """
 import os, pathlib, sys, tarfile, tempfile, shutil
-
+from datetime import datetime
 
 tarfile_name = 'ptest.tar.gz'
 tarinput_dir = '/shared/ptest'
@@ -13,7 +13,7 @@ if __name__ == '__main__':
 
 
     """
-
+    start_time = datetime.now()
     testcase = pathlib.Path(sys.argv[0])
     test_name = testcase.name[0:len(testcase.name) - len(testcase.suffix)]
     result_file = f'{testcase.parent}{os.path.sep}file_test2.result'
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
                 result = os.system(f'diff old new >> {log_file}')
 
-    print(f'Completed {test_name} - {result}')
+    print(f'Completed {test_name} - {result} {datetime.now() - start_time}')
     os.chdir(start_dir)
     if result == 0:
         temp_file_dir.cleanup()
