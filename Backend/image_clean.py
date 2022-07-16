@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
 
-from Cleaner import FileCleaner, ImageCleaner, FolderCleaner, file_cleaner
+from Backend.Cleaner import FileCleaner, ImageCleaner, FolderCleaner, file_cleaner
 
 
 NEW_FILE: int = 0
@@ -92,6 +92,7 @@ def process_duplicates_movies(movie_dir):
         elif entry.is_file():
             file_entry = FileCleaner(Path(entry), folder=movie_dir)
             if file_entry.path.suffix in file_entry.all_movies:
+                # todo: Use .stem property ...
                 just_name = file_entry.just_name
                 for suffix in file_entry.all_images:
                     if FileCleaner(Path(f'{just_name}{suffix}')).is_registered():
@@ -134,8 +135,7 @@ def process_file(entry: Union[FileCleaner, ImageCleaner]):
         logger.debug(f'Invalid file {entry.path}')
         return
 
-    migration_path = entry.get_new_path(base=migrated_path) if keep_converted_files else None
-    new_entry = entry.convert(migration_path, remove=keep_original_files and not in_place)
+    new_entry = entry.convert(migrated_path, remove=keep_original_files and not in_place)
     if id(new_entry) != id(entry):  # The file was converted and cleaned up
         entry = new_entry  # work on the converted file
 
@@ -209,10 +209,9 @@ app_help = f'{app_name} -hdmsaruPV -i <ignore_folder>... -n <non_description_fol
            f'just want to ignore the parent,  example folder "Camera Uploads' \
            f'\n\ninput folder - where to start the processing from' \
 
-
-log_file = f'{os.environ.get("HOME")}{os.path.sep}.{app_name}.log'
-if os.path.exists(log_file) and os.stat(log_file).st_size > 100000:
-    FileCleaner.rollover_name(Path(log_file))
+log_file = Path.home().joinpath(f'{app_name}.log')
+if log_file.exists() and os.stat(log_file).st_size > 100000:
+    FileCleaner.rollover_name(log_file)
 
 debugging = os.getenv(f'{app_name.upper()}_DEBUG')
 logger = logging.getLogger(app_name)
@@ -321,16 +320,16 @@ if __name__ == '__main__':
         in_place = True
 
     # Make sure we ignore these,  they came from us.
-    ignore_folders.append(Path(f'{output_folder}{os.path.sep}{movie_path_base}'))
-    ignore_folders.append(Path(f'{output_folder}{os.path.sep}{duplicate_path_base}'))
-    ignore_folders.append(Path(f'{output_folder}{os.path.sep}{converted_path_base}'))
-    ignore_folders.append(Path(f'{output_folder}{os.path.sep}{app_name}_Small'))
+    ignore_folders.append(output_folder.joinpath(movie_path_base))
+    ignore_folders.append(output_folder.joinpath(duplicate_path_base))
+    ignore_folders.append(output_folder.joinpath(converted_path_base))
+    ignore_folders.append(output_folder.joinpath(f'{app_name}_Small'))
 
-    no_date_path = Path(f'{output_folder}{os.path.sep}{app_name}_NoDate')
-    small_path = Path(f'{output_folder}{os.path.sep}{app_name}_Small')
-    migrated_path = Path(f'{output_folder}{os.path.sep}{app_name}_Migrated') if keep_converted_files else None
-    duplicate_path = Path(f'{output_folder}{os.path.sep}{app_name}_Duplicates') if keep_duplicates else None
-    image_movies_path = Path(f'{output_folder}{os.path.sep}{app_name}_ImageMovies') if keep_movie_clips else None
+    no_date_path = output_folder.joinpath(f'{app_name}_NoDate')
+    small_path = output_folder.joinpath(f'{app_name}_Small')
+    migrated_path = output_folder.joinpath(f'{app_name}_Migrated') if keep_converted_files else None
+    duplicate_path = output_folder.joinpath(f'{app_name}_Duplicates') if keep_duplicates else None
+    image_movies_path = output_folder.joinpath(f'{app_name}_ImageMovies') if keep_movie_clips else None
 
     master = FolderCleaner(input_folder,
                            parent=None,
