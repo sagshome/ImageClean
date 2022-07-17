@@ -1,0 +1,33 @@
+#:kivy 2.1.0
+
+BasicWindow:
+    canvas.before:
+        Color:
+            rgba: 0, 1, 0, 1
+        Rectangle:
+            # self here refers to the widget i.e FloatLayout
+            pos: self.pos
+            size: self.size
+    Button:
+        text: 'GoodBye!!'
+        size_hint: 0.8, 0.1
+        pos_hint: {'left': 0, 'top': 1}
+
+    Button:
+        text: 'bb'
+        size_hint: 0.2, 0.1
+        pos_hint: {'right': 1, 'top': 1}
+
+
+    Button:
+        text: 'Solong!!'
+        size_hint: 0.8, 0.1
+        pos_hint: {'left': 0.8, 'top': .9}
+    Button:
+        text: 'cc'
+        size_hint: 0.2, 0.1
+        pos_hint: {'right': 1, 'top': .9}
+
+
+
+

@@ -4,7 +4,6 @@ import os
 import re
 
 import piexif
-import pyheif
 
 from datetime import datetime
 from filecmp import cmp
@@ -243,7 +242,8 @@ class Cleaner:
                 new = f'{new}{os.path.sep}{month}'
                 if day:
                     new = f'{new}{os.path.sep}{day}'
-        self._make_new_path(Path(new))
+        if not os.path.exists(new):
+            os.makedirs(new)
         return Path(new)
 
     def relocate_file(self,
@@ -267,7 +267,7 @@ class Cleaner:
 
         if not os.path.exists(path):
             if create_dir:
-                self._make_new_path(path)
+                os.makedirs(path)
             else:
                 logger.debug(f'Create Dir is {create_dir},  not going to move {self.path.name} to {path}')
                 return
@@ -369,15 +369,6 @@ class Cleaner:
                         os.unlink(new_path)
                     os.rename(old_path, new_path)
             os.rename(destination, f'{destination.parent}{os.path.sep}{basename}_0{destination.suffix}')
-
-    @staticmethod
-    def _make_new_path(path: Path):
-        parts = path.parts
-        folder = None
-        for part in parts[0:len(parts)]:
-            folder = f'{folder}{os.path.sep}{part}' if not part == os.path.sep else os.path.sep
-            if not os.path.exists(folder):
-                os.mkdir(folder)
 
 
 class FileCleaner(Cleaner):
@@ -543,9 +534,9 @@ class ImageCleaner(Cleaner):
         self.load_image_data()
         return self._image_data
 
-    def convert(self, migrated_path: Path = None, remove: bool = True) -> ImageCT:
+    def convert(self, migrated_base: Path = None, remove: bool = True) -> ImageCT:
         """
-        :param migrated_path:  Where (if any) to archive originals to
+        :param migrated_base:  Where (if any) to archive originals to
         :param remove:  default: True - Cleanup after successful conversion
         :return: self or a new object thats updated
 
@@ -555,6 +546,15 @@ class ImageCleaner(Cleaner):
         if self.path.suffix.upper() != '.HEIC':
             return self
 
+        import platform
+
+        if platform.system() == 'Windows':
+            logger.error('Conversion from HEIC is not supported on Windows')
+            return self
+        else:
+            import pyheif
+
+        save_to = self.get_new_path(base=migrated_base) if migrated_base else None
         new_name = f'{self.just_path}.jpg'
         if os.path.exists(new_name):
             logger.debug(f'Will not convert {self.path} to {new_name} - It already exists')
@@ -577,8 +577,8 @@ class ImageCleaner(Cleaner):
                     exif_bytes = piexif.dump(exif_dict)
                     image.save(new_name, format("JPEG"), exif=exif_bytes)
 
-                    if migrated_path:
-                        self.relocate_file(migrated_path, remove=True, rollover=False)
+                    if save_to:
+                        self.relocate_file(save_to, remove=True, rollover=False)
                     return ImageCleaner(Path(new_name), self.folder)
 
             except AttributeError as e:

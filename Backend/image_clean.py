@@ -20,169 +20,272 @@ SMALL_FILE: int = 4
 WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 members is a Yellow flag
 
 
-def register_files(input_dir: Path, base: Path):
-    for entry in input_dir.iterdir():
-        if entry.is_dir():
-            if entry not in ignore_folders:
-                register_files(entry, base)
-        else:
-            if not entry.parent == base:  # If this was previously processed it would not be here
-                file_cleaner(entry, FolderCleaner(input_dir)).register()
+class ImageClean:
+
+    def __init__(self, **kwargs):
+
+        self.config = {
+            'recreate': False,
+            'keep_duplicates': False,
+            'keep_movie_clips': False,
+            'keep_converted_files': False,
+            'keep_original_files': False,
+        }
+
+        for key in kwargs:
+            if key in self.config:
+                # todo: call the actual function
+                self.config[key] = kwargs[key]
+
+        self.process_all_files = False
+        self.verbose = False
+        self.in_place = False
+        self.prepared = False
+        self.output_folder = None
+        self.input_folder = None
+        self.ignore_folders = []
+        self.bad_parents = []
+        self.no_date_path = None
+        self.small_path = None
+        self.migrated_path = None
+        self.duplicate_path = None
+        self.image_movies_path = None
+
+    def set_recreate(self, value: bool):
+        self.config['recreate'] = value
+
+    def set_keep_duplicates(self, value: bool):
+        self.config['keep_duplicates'] = value
+
+    def set_keep_movie_clips(self, value: bool):
+        self.config['keep_movie_clips'] = value
+
+    def set_keep_converted_files(self, value: bool):
+        self.config['keep_converted_files'] = value
+
+    def set_keep_original_files(self, value: bool):
+        self.config['keep_original_files'] = value
+
+    def set_process_all_files(self, value: bool):
+        self.config['process_all_files'] = value
+
+    def add_ignore_folder(self, value: Path):
+        self.ignore_folders.append(value)
+
+    def add_bad_parents(self, value: Path):
+        self.bad_parents.append(value)
+
+    def set_paranoid(self, value: bool):
+        self.set_keep_duplicates(value)
+        self.set_keep_original_files(value)
+        self.set_keep_converted_files(value)
+        self.set_keep_movie_clips(value)
+
+    def prepare(self):
+        self.prepared = True
+        if not self.output_folder:
+            self.output_folder = self.input_folder
+
+        if self.output_folder == self.input_folder:
+            if self.config['recreate']:
+                assert False, f'Can not recreate with same input/output folders: {self.input_folder}\n\n'
+            in_place = True
+
+        # Make sure we ignore these,  they came from us.
+        self.ignore_folders.append(self.output_folder.joinpath(movie_path_base))
+        self.ignore_folders.append(self.output_folder.joinpath(duplicate_path_base))
+        self.ignore_folders.append(self.output_folder.joinpath(converted_path_base))
+        self.ignore_folders.append(self.output_folder.joinpath(f'{app_name}_Small'))
+
+        self.no_date_path = self.output_folder.joinpath(f'{app_name}_NoDate')
+        self.small_path = self.output_folder.joinpath(f'{app_name}_Small')
+        if self.config['keep_converted_files']:
+            self.output_folder.joinpath(f'{app_name}_Migrated')
+
+        if self.config['keep_duplicates']:
+            self.duplicate_path = self.output_folder.joinpath(f'{app_name}_Duplicates')
+
+        if self.config['keep_movie_clips']:
+            self.output_folder.joinpath(f'{app_name}_ImageMovies')
 
 
-def duplicate_get(entry: Union[ImageCleaner, FileCleaner]) -> Optional[Union[ImageCleaner, FileCleaner]]:
+        # Backup any previous attempts
 
-    for value in entry.get_all_registered():
-        if entry == value:  # The image data is exactly the same
-            return value
-    logger.error(f'Expecting to find a duplicate for {entry.path}')
-    return None
+        if not self.config['recreate'] or self.config['in_place']:  # Same root or importing from a new location
+            self.register_files(self.output_folder, self.output_folder)
+
+        if self.config['recreate']:
+            if self.output_folder.exists():
+                os.rename(self.output_folder, f'{self.output_folder}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
+
+        os.mkdir(self.output_folder) if not self.output_folder.exists() else None
+        os.mkdir(self.no_date_path) if not self.no_date_path.exists() else None
+        os.mkdir(self.migrated_path) if self.migrated_path and not self.migrated_path.exists() else None
+        os.mkdir(self.duplicate_path) if self.duplicate_path and not self.duplicate_path.exists() else None
+        os.mkdir(self.image_movies_path) if self.image_movies_path and not self.image_movies_path.exists() else None
+        os.mkdir(self.small_path) if self.small_path and not self.small_path.exists() else None
+
+    def register_files(self, input_dir: Path, base: Path):
+        for entry in input_dir.iterdir():
+            if entry.is_dir():
+                if entry not in self.ignore_folders:
+                    self.register_files(entry, base)
+            else:
+                if not entry.parent == base:  # If this was previously processed it would not be here
+                    file_cleaner(entry, FolderCleaner(input_dir)).register()
 
 
-def duplicates_test(entry: Union[ImageCleaner, FileCleaner]) -> int:
-    """
-    Test for duplicates, based on registered files
-    :param entry: The instance of the current file
-    :return: int,
-    """
+    @staticmethod
+    def duplicate_get(entry: Union[ImageCleaner, FileCleaner]) -> Optional[Union[ImageCleaner, FileCleaner]]:
 
-    result = NEW_FILE
-    if entry.is_small:
-        result = SMALL_FILE
-    elif not entry.is_registered():
-        result = NEW_FILE  # This is a new FileCleaner instance.
-    else:
         for value in entry.get_all_registered():
-            if entry == value:  # The data is exactly the same
-                if entry.folder == value.folder:  # Folders have same weight
-                    if entry < value:
-                        return LESSER_FILE
-                    elif entry > value:
-                        return GREATER_FILE
-                elif entry.folder > value.folder:
-                    return GREATER_FILE
-                elif entry.folder < value.folder:
-                    return LESSER_FILE
+            if entry == value:  # The image data is exactly the same
+                return value
+        logger.error(f'Expecting to find a duplicate for {entry.path}')
+        return None
 
-                # Lets use the file date
-                if entry.date == value.date:
-                    if entry.folder.date == value.folder.date:
-                        return EXACT_FILE
-                    elif entry.folder.date and value.folder.date:
-                        if entry.folder.date < value.folder.date:
-                            return GREATER_FILE
-                        elif entry.folder.date > value.folder.date:
-                            return LESSER_FILE
-                    if entry.folder.date and not value.folder.date:
-                        return GREATER_FILE
-                    if not entry.folder.date and value.folder.date:
-                        return LESSER_FILE
-                elif entry.date < value.date:
-                    return GREATER_FILE
-                else:
-                    return LESSER_FILE
-                return EXACT_FILE
-    return result
+    @staticmethod
+    def duplicates_test(entry: Union[ImageCleaner, FileCleaner]) -> int:
+        """
+        Test for duplicates, based on registered files
+        :param entry: The instance of the current file
+        :return: int,
+        """
 
-
-def process_duplicates_movies(movie_dir):
-    for entry in movie_dir.path.iterdir():
-        if entry.is_dir():
-            process_duplicates_movies(FolderCleaner(Path(entry), movie_dir.root_folder, parent=movie_dir))
-        elif entry.is_file():
-            file_entry = FileCleaner(Path(entry), folder=movie_dir)
-            if file_entry.path.suffix in file_entry.all_movies:
-                # todo: Use .stem property ...
-                just_name = file_entry.just_name
-                for suffix in file_entry.all_images:
-                    if FileCleaner(Path(f'{just_name}{suffix}')).is_registered():
-                        if image_movies_path:
-                            print(f'.... Saving Clip {file_entry.path}')
-                            file_entry.relocate_file(image_movies_path, remove=True)
-                        else:
-                            print(f'.... Removing Clip {file_entry.path}')
-                            os.unlink(file_entry.path)
-                        break
-
-
-def audit_folders(path: Path) -> List[Path]:
-    large_folders = []
-    for entry in path.iterdir():
-        if entry.is_dir():
-            audit_folders(entry)
-            size = len(os.listdir(entry))
-            if size == 0:
-                print(f'  Removing empty folder {entry}') if verbose else None
-                os.rmdir(entry)
-            elif size > WARNING_FOLDER_SIZE:
-                large_folders.append(entry)
-                print(f'  VERY large folder ({size}) found {entry}')
-    return large_folders
-
-
-def process_file(entry: Union[FileCleaner, ImageCleaner]):
-    """
-    Perform any conversions
-    Extract image date
-    Calculate new destination folder
-    Test Duplicate status
-
-    :param entry: Cleaner object,  promoted to a subclass when processed
-    """
-    print(f'.. File: {entry.path}') if verbose else None
-
-    if not entry.is_valid:
-        logger.debug(f'Invalid file {entry.path}')
-        return
-
-    new_entry = entry.convert(migrated_path, remove=keep_original_files and not in_place)
-    if id(new_entry) != id(entry):  # The file was converted and cleaned up
-        entry = new_entry  # work on the converted file
-
-    if not process_all_files:
-        if entry.path.suffix not in entry.all_images:
-            if entry.path.suffix not in entry.all_movies:
-                logger.debug(f'Ignoring not image file {entry.path}')
-                return
-
-    # Now lets go about building our output folder
-    if entry.date:
-        new_path = entry.get_new_path(output_folder)
-    else:  # make sure we do not over process things already determined to not be 'no date' files.
-        if str(entry.path.parent).startswith(str(no_date_path)):
-            new_path = entry.path.parent
+        result = NEW_FILE
+        if entry.is_small:
+            result = SMALL_FILE
+        elif not entry.is_registered():
+            result = NEW_FILE  # This is a new FileCleaner instance.
         else:
-            new_path = entry.get_new_path(no_date_path)
+            for value in entry.get_all_registered():
+                if entry == value:  # The data is exactly the same
+                    if entry.folder == value.folder:  # Folders have same weight
+                        if entry < value:
+                            return LESSER_FILE
+                        elif entry > value:
+                            return GREATER_FILE
+                    elif entry.folder > value.folder:
+                        return GREATER_FILE
+                    elif entry.folder < value.folder:
+                        return LESSER_FILE
 
-    dup_result = duplicates_test(entry)
-    logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
-    if dup_result == NEW_FILE:  # We have not seen this file before
-        entry.relocate_file(new_path, register=True, remove=not keep_original_files or in_place, rollover=True)
-    elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
-        entry.relocate_file(entry.get_new_path(small_path), remove=not keep_original_files, rollover=False)
-    elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
-        existing = duplicate_get(entry)
-        if dup_result in (LESSER_FILE, EXACT_FILE):
-            entry.relocate_file(entry.get_new_path(duplicate_path), remove=not keep_original_files or in_place,
-                                create_dir=False, rollover=False)
-        elif dup_result == GREATER_FILE:
-            existing.relocate_file(existing.get_new_path(duplicate_path), remove=not keep_original_files,
-                                   create_dir=False, rollover=False)
-            entry.relocate_file(new_path, register=True, remove=in_place, rollover=False)
-    else:
-        assert False, f'Invalid test result {dup_result}'
+                    # Lets use the file date
+                    if entry.date == value.date:
+                        if entry.folder.date == value.folder.date:
+                            return EXACT_FILE
+                        elif entry.folder.date and value.folder.date:
+                            if entry.folder.date < value.folder.date:
+                                return GREATER_FILE
+                            elif entry.folder.date > value.folder.date:
+                                return LESSER_FILE
+                        if entry.folder.date and not value.folder.date:
+                            return GREATER_FILE
+                        if not entry.folder.date and value.folder.date:
+                            return LESSER_FILE
+                    elif entry.date < value.date:
+                        return GREATER_FILE
+                    else:
+                        return LESSER_FILE
+                    return EXACT_FILE
+        return result
+
+    def process_duplicates_movies(self, movie_dir):
+        for entry in movie_dir.path.iterdir():
+            if entry.is_dir():
+                self.process_duplicates_movies(FolderCleaner(Path(entry), movie_dir.root_folder, parent=movie_dir))
+            elif entry.is_file():
+                file_entry = FileCleaner(Path(entry), folder=movie_dir)
+                if file_entry.path.suffix in file_entry.all_movies:
+                    # todo: Use .stem property ...
+                    just_name = file_entry.just_name
+                    for suffix in file_entry.all_images:
+                        if FileCleaner(Path(f'{just_name}{suffix}')).is_registered():
+                            if self.image_movies_path:
+                                print(f'.... Saving Clip {file_entry.path}')
+                                file_entry.relocate_file(self.image_movies_path, remove=True)
+                            else:
+                                print(f'.... Removing Clip {file_entry.path}')
+                                os.unlink(file_entry.path)
+                            break
 
 
-def process_folder(folder: FolderCleaner):
-    print(f'. Folder: {folder.path}') if verbose else None
-    for entry in folder.path.iterdir():
-        if entry.is_dir() and entry not in ignore_folders:
-            this_folder = FolderCleaner(Path(entry), parent=folder)
-            if this_folder.description in bad_parents:
-                this_folder.description = None
-            process_folder(this_folder)
-        elif entry.is_file():
-            process_file(file_cleaner(entry, folder))
+    def audit_folders(self, path: Path) -> List[Path]:
+        large_folders = []
+        for entry in path.iterdir():
+            if entry.is_dir():
+                self.audit_folders(entry)
+                size = len(os.listdir(entry))
+                if size == 0:
+                    print(f'  Removing empty folder {entry}') if verbose else None
+                    os.rmdir(entry)
+                elif size > WARNING_FOLDER_SIZE:
+                    large_folders.append(entry)
+                    print(f'  VERY large folder ({size}) found {entry}')
+        return large_folders
+
+    def process_file(self, entry: Union[FileCleaner, ImageCleaner]):
+        """
+        Perform any conversions
+        Extract image date
+        Calculate new destination folder
+        Test Duplicate status
+
+        :param entry: Cleaner object,  promoted to a subclass when processed
+        """
+        print(f'.. File: {entry.path}') if verbose else None
+
+        if not entry.is_valid:
+            logger.debug(f'Invalid file {entry.path}')
+            return
+
+        new_entry = entry.convert(self.migrated_path, remove=self.config['keep_original_files'] and not self.config['in_place'])
+        if id(new_entry) != id(entry):  # The file was converted and cleaned up
+            entry = new_entry  # work on the converted file
+
+        if not self.config['process_all_files']:
+            if entry.path.suffix not in entry.all_images:
+                if entry.path.suffix not in entry.all_movies:
+                    logger.debug(f'Ignoring not image file {entry.path}')
+                    return
+
+        # Now lets go about building our output folder
+        if entry.date:
+            new_path = entry.get_new_path(self.output_folder)
+        else:  # make sure we do not over process things already determined to not be 'no date' files.
+            if str(entry.path.parent).startswith(str(self.no_date_path)):
+                new_path = entry.path.parent
+            else:
+                new_path = entry.get_new_path(self.no_date_path)
+
+        dup_result = self.duplicates_test(entry)
+        logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
+        if dup_result == NEW_FILE:  # We have not seen this file before
+            entry.relocate_file(new_path, register=True, remove=not keep_original_files or in_place, rollover=True)
+        elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
+            entry.relocate_file(entry.get_new_path(small_path), remove=not keep_original_files, rollover=False)
+        elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
+            existing = self.duplicate_get(entry)
+            if dup_result in (LESSER_FILE, EXACT_FILE):
+                entry.relocate_file(entry.get_new_path(duplicate_path), remove=not keep_original_files or in_place,
+                                    create_dir=False, rollover=False)
+            elif dup_result == GREATER_FILE:
+                existing.relocate_file(existing.get_new_path(duplicate_path), remove=not keep_original_files,
+                                       create_dir=False, rollover=False)
+                entry.relocate_file(new_path, register=True, remove=in_place, rollover=False)
+        else:
+            assert False, f'Invalid test result {dup_result}'
+
+    def process_folder(self, folder: FolderCleaner):
+        print(f'. Folder: {folder.path}') if verbose else None
+        for entry in folder.path.iterdir():
+            if entry.is_dir() and entry not in self.ignore_folders:
+                this_folder = FolderCleaner(Path(entry), parent=folder)
+                if this_folder.description in self.bad_parents:
+                    this_folder.description = None
+                self.process_folder(this_folder)
+            elif entry.is_file():
+                self.process_file(file_cleaner(entry, folder))
 
 
 app_path = Path(sys.argv[0])
@@ -240,6 +343,7 @@ if __name__ == '__main__':
     5. Clean up duplicates
     
     """
+    verbose = False
     start_time = datetime.now()
     logger.debug(f'Starting {app_name} - {start_time}')
     try:
@@ -248,28 +352,17 @@ if __name__ == '__main__':
         print(app_help)
         sys.exit(2)
 
-    recreate = False
-    keep_duplicates = False
-    keep_movie_clips = False
-    keep_converted_files = False
-    keep_original_files = False
-    process_all_files = False
-    in_place = False
-    verbose = False
-    output_folder = None
-    ignore_folders = []
-    bad_parents = []
-
+    app = ImageClean()
     if len(args) != 1:
         print(f'Only one argument <input folder> is required.\n\n')
         print(app_help)
         sys.exit(2)
     else:
-        input_folder = args[0]
+        app.input_folder = Path(args[0])
         try:
-            os.stat(input_folder)
+            os.stat(app.input_folder)
         except FileNotFoundError:
-            print(f'Input Folder: {input_folder} is not found.   Critical error \n\n {app_help}')
+            print(f'Input Folder: {app.input_folder} is not found.   Critical error \n\n {app_help}')
             sys.exit(3)
 
     for opt, arg in opts:
@@ -277,30 +370,27 @@ if __name__ == '__main__':
             print(app_help)
             sys.exit(2)
         elif opt == '-r':
-            recreate = True
+            app.set_recreate(True)
         elif opt == '-d':
-            keep_duplicates = True
+            app.set_keep_duplicates(True)
         elif opt == '-m':
-            keep_movie_clips = True
+            app.set_keep_movie_clips(True)
         elif opt == '-a':
-            process_all_files = True
+            app.process_all_files = True
         elif opt == '-c':
-            keep_converted_files = True
+            app.set_keep_converted_files(True)
         elif opt == '-s':
-            keep_original_files = True
+            app.set_keep_original_files(True)
         elif opt == '-o':
-            output_folder = Path(arg)
+            app.output_folder = Path(arg)
         elif opt == '-i':
-            ignore_folders.append(arg)
+            app.add_ignore_folder(Path(arg))
         elif opt == '-n':
-            bad_parents.append(arg)
+            app.add_bad_parents(Path(arg))
         elif opt == '-V':
-            verbose = True
+            verbose = app.verbose = True
         elif opt == '-P':
-            keep_duplicates = True
-            keep_movie_clips = True
-            keep_converted_files = True
-            keep_original_files = True
+            app.set_paranoid(True)
         else:
             print(f'Invalid option: {opt}\n\n')
             print(app_help)
@@ -308,57 +398,19 @@ if __name__ == '__main__':
 
     print(f'logging to...{log_file}') if verbose else None
 
-    input_folder = Path(input_folder)
-    if not output_folder:
-        output_folder = input_folder  # Going to update in place
-
-    if output_folder == input_folder:
-        if recreate:
-            print(f'Can not recreate with same input/output folders: {input_folder}\n\n')
-            print(app_help)
-            sys.exit(3)
-        in_place = True
-
-    # Make sure we ignore these,  they came from us.
-    ignore_folders.append(output_folder.joinpath(movie_path_base))
-    ignore_folders.append(output_folder.joinpath(duplicate_path_base))
-    ignore_folders.append(output_folder.joinpath(converted_path_base))
-    ignore_folders.append(output_folder.joinpath(f'{app_name}_Small'))
-
-    no_date_path = output_folder.joinpath(f'{app_name}_NoDate')
-    small_path = output_folder.joinpath(f'{app_name}_Small')
-    migrated_path = output_folder.joinpath(f'{app_name}_Migrated') if keep_converted_files else None
-    duplicate_path = output_folder.joinpath(f'{app_name}_Duplicates') if keep_duplicates else None
-    image_movies_path = output_folder.joinpath(f'{app_name}_ImageMovies') if keep_movie_clips else None
-
-    master = FolderCleaner(input_folder,
+    master = FolderCleaner(app.input_folder,
                            parent=None,
-                           root_folder=input_folder,
-                           output_folder=output_folder,
-                           no_date_folder=no_date_path)
-
-    # Backup any previous attempts
-
-    if not recreate or in_place:  # Same root or importing from a new location
-        register_files(output_folder, output_folder)
-
-    if recreate:
-        if os.path.exists(output_folder):
-            os.rename(output_folder, f'{output_folder}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
-
-    os.mkdir(output_folder) if not os.path.exists(output_folder) else None
-    os.mkdir(no_date_path) if not os.path.exists(no_date_path) else None
-    os.mkdir(migrated_path) if migrated_path and not os.path.exists(migrated_path) else None
-    os.mkdir(duplicate_path) if duplicate_path and not os.path.exists(duplicate_path) else None
-    os.mkdir(image_movies_path) if image_movies_path and not os.path.exists(image_movies_path) else None
-    os.mkdir(small_path) if small_path and not os.path.exists(small_path) else None
+                           root_folder=app.input_folder,
+                           output_folder=app.output_folder,
+                           no_date_folder=app.no_date_path)
 
     master.description = None
-    process_folder(master)
+    app.prepare()
+    app.process_folder(master)
 
     # Clean up
     master.reset()
-    process_duplicates_movies(FolderCleaner(Path(no_date_path), root_folder=no_date_path))
-    suspicious_folders = audit_folders(output_folder)
+    app.process_duplicates_movies(FolderCleaner(app.no_date_path, root_folder=app.no_date_path))
+    suspicious_folders = app.audit_folders(app.output_folder)
     # todo: roll back small files that are unique
     logger.debug(f'Completed ({datetime.now() - start_time}')
