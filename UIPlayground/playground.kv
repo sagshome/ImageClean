@@ -1,33 +1,73 @@
 #:kivy 2.1.0
 
-BasicWindow:
-    canvas.before:
-        Color:
-            rgba: 0, 1, 0, 1
-        Rectangle:
-            # self here refers to the widget i.e FloatLayout
-            pos: self.pos
-            size: self.size
-    Button:
-        text: 'GoodBye!!'
-        size_hint: 0.8, 0.1
-        pos_hint: {'left': 0, 'top': 1}
+Root:
+    text_input: text_input
 
-    Button:
-        text: 'bb'
-        size_hint: 0.2, 0.1
-        pos_hint: {'right': 1, 'top': 1}
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: 'Load'
+                on_release: root.show_load()
+            Button:
+                text: 'Save'
+                on_release: root.show_save()
+
+        BoxLayout:
+            TextInput:
+                id: text_input
+                text: ''
+
+            RstDocument:
+                text: text_input.text
+                show_errors: True
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+
+            Button:
+                text: "Select"
+                on_release: root.load(filechooser.path, filechooser.selection)
+
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
 
 
-    Button:
-        text: 'Solong!!'
-        size_hint: 0.8, 0.1
-        pos_hint: {'left': 0.8, 'top': .9}
-    Button:
-        text: 'cc'
-        size_hint: 0.2, 0.1
-        pos_hint: {'right': 1, 'top': .9}
+<SaveDialog>:
+    text_input: text_input
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            on_selection: text_input.text = self.selection and self.selection[0] or ''
 
+        TextInput:
+            id: text_input
+            size_hint_y: None
+            height: 30
+            multiline: False
 
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
 
-
+            Button:
+                text: "Save"
+                on_release: root.save(filechooser.path, text_input.text)

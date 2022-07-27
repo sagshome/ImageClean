@@ -1,47 +1,64 @@
 from kivy.app import App
-from kivy.uix.widget import Widget
-from kivy.uix.button import Button
-from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty
+from kivy.uix.floatlayout import FloatLayout
+from kivy.factory import Factory
+from kivy.properties import ObjectProperty
+from kivy.uix.popup import Popup
+
+import os
 
 
-class RootWidget(BoxLayout):
-
-    def __init__(self, **kwargs):
-        super(RootWidget, self).__init__(**kwargs)
-        self.add_widget(Button(text='btn 1'))
-        cb = CustomBtn(text='Custom')
-        #cb.bind(foobar=self.btn_pressed)
-        self.add_widget(cb)
-        self.add_widget(Button(text='btn 2'))
+class LoadDialog(FloatLayout):
+    load = ObjectProperty(None)
+    cancel = ObjectProperty(None)
 
 
-    def btn_pressed(self, instance, pos):
-        print('pos: printed from root widget: {pos}'.format(pos=pos))
+class SaveDialog(FloatLayout):
+    save = ObjectProperty(None)
+    text_input = ObjectProperty(None)
+    cancel = ObjectProperty(None)
 
 
-class CustomBtn(Button):
-    foobar = ListProperty([0, 0])
+class Root(FloatLayout):
+    loadfile = ObjectProperty(None)
+    savefile = ObjectProperty(None)
+    text_input = ObjectProperty(None)
 
-    def on_touch_down(self, touch):
-        print(f'on_touch_down... {touch.pos} my_pos {self.pos} - {self.collide_point(*touch.pos)}')
+    def dismiss_popup(self):
+        self._popup.dismiss()
 
-        if self.collide_point(*touch.pos):
-            self.foobar = touch.pos
-            # we consumed the touch. return False here to propagate
-            # the touch further to the children.
-            return True
-        return super(CustomBtn, self).on_touch_down(touch)
+    def show_load(self):
+        content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Load file", content=content,
+                            size_hint=(0.9, 0.9))
+        self._popup.open()
 
-    def on_foobar(self, instance, pos):
-        print('pressed at {pos}'.format(pos=pos))
+    def show_save(self):
+        content = SaveDialog(save=self.save, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Save file", content=content,
+                            size_hint=(0.9, 0.9))
+        self._popup.open()
+
+    def load(self, path, filename):
+        with open(os.path.join(path, filename[0])) as stream:
+            self.text_input.text = stream.read()
+
+        self.dismiss_popup()
+
+    def save(self, path, filename):
+        with open(os.path.join(path, filename), 'w') as stream:
+            stream.write(self.text_input.text)
+
+        self.dismiss_popup()
 
 
-class TestApp(App):
+class Playground(App):
+    pass
 
-    def build(self):
-        return RootWidget()
+
+Factory.register('Root', cls=Root)
+Factory.register('LoadDialog', cls=LoadDialog)
+Factory.register('SaveDialog', cls=SaveDialog)
 
 
 if __name__ == '__main__':
-    TestApp().run()
+    Playground().run()
