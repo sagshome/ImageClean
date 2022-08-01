@@ -1,4 +1,25 @@
 #:kivy 2.1.0
+<DismissDialog>:
+    # Reusable dialog to display warnings/errors/info
+
+    BoxLayout:
+        size_hint: 0.6, 0.6
+        pos_hint: {'right': 1, 'center': 0.5}
+
+        #pos_hint: {"x":0.2, "top":center}
+
+        orientation: 'vertical'
+        Label:
+            text: root.error_text
+            #size_hint: 0.6, 0.2
+            #pos_hint: {"x":0.2, "top":1}
+
+        Button:
+            text: "Dismiss"
+            #size_hint: 0.2, 0.2
+            #pos_hint: {"x":0.45, "y":0.4}
+            on_release:
+                root.dismiss()
 
 <CheckBoxItem>:
     id: _container

@@ -16,7 +16,7 @@ from kivy.vector import Vector
 from kivy.clock import Clock
 from kivy.uix.floatlayout import FloatLayout
 from kivy.factory import Factory
-from kivy.properties import ObjectProperty
+from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.popup import Popup
 
 from kivy.uix.button import Button
@@ -54,6 +54,31 @@ if debugging:
 else:
     logger.setLevel(level=logging.ERROR)
 
+def my_callback(instance):
+    print('Popup', instance, 'is being dismissed but is prevented!')
+    return True
+
+def dismiss_dialog(text):
+
+    content = DismissDialog(text)
+    _popup = Popup(title="", content=content, size_hint=(0.9, 0.9))
+    content.popup = _popup
+    _popup.open()
+
+
+class DismissDialog(BoxLayout):
+
+    error_text = StringProperty()
+
+    def __init__(self, message=None, **kwargs):
+        super(DismissDialog, self).__init__(**kwargs)
+        self.error_text = message
+        self.popup = None
+
+    def dismiss(self):
+        self.popup.dismiss()
+
+
 
 class CheckBoxItemLabel(Label):
     def __init__(self, **kwargs):
@@ -78,6 +103,7 @@ class CheckBoxItem(BoxLayout):
         else:
             print('touched without callback')
 
+
 class AddDialog(FloatLayout):
 
     def __init__(self, load_path=None, **kwargs):
@@ -94,15 +120,17 @@ class AddDialog(FloatLayout):
 
 class LoadDialog(FloatLayout):
 
-    def __init__(self, load_path=None, **kwargs):
+    def __init__(self, load_path=None, rooted=False, **kwargs):
         super(LoadDialog, self).__init__(**kwargs)
         self.filechooser.path = load_path if load_path else '/'
+        self.filechooser.rootpath = None if not rooted else load_path
 
     def new(path, filename):
         print(path, filename)
 
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
+
 
 class SaveDialog(FloatLayout):
     save = ObjectProperty(None)
@@ -121,8 +149,8 @@ class IgnoreFoldersSelector(BoxLayout):
         self._popup.dismiss()
 
     def show_load(self):
-        content = LoadDialog(str(cleaner_app.input_folder), load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Load file", content=content, size_hint=(0.9, 0.9))
+        content = LoadDialog(str(cleaner_app.input_folder), rooted=True, load=self.load, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Select a Folder to ignore", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def load(self, path, filename):
@@ -144,55 +172,21 @@ class SkipFoldersSelector(BoxLayout):
         self._popup.dismiss()
 
     def show_load(self):
-        content = LoadDialog(str(cleaner_app.input_folder), load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Load file", content=content, size_hint=(0.9, 0.9))
+        content = LoadDialog(str(cleaner_app.input_folder), rooted=True, load=self.load, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Select folder base to skip definition", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def load(self, path, filename):
         if len(filename) == 1:
             file = Path(os.path.join(path, filename[0])).name
-
             cleaner_app.add_bad_parents(file)
             self.text = f'{self.text}\n{file}'
         self.dismiss_popup()
 
 
 class EnterFolder(TextInput):
+    pass
 
-    def __init__(self, **kwargs):
-        super(EnterFolder, self).__init__(**kwargs)
-        self._popup = None
-        self.path = None
-
-    def on_enter(instance, value):
-        print('User pressed enter in', instance)
-
-    def dismiss_popup(self):
-        if self._popup:
-            self._popup.dismiss()
-
-    def show_load(self):
-        self.path = cleaner_app.output_folder if cleaner_app.output_folder else cleaner_app.input_folder.parent
-        content = AddDialog(str(self.path), new=self.new, load=self.load, cancel=self.dismiss_popup)
-
-        self._popup = Popup(title="Load file", content=content, size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        self.text = os.path.join(path, filename[0])
-        cleaner_app.output_folder = Path(self.text)
-        self.dismiss_popup()
-
-    def new(self, path, filename):
-        # This is blocking - should use proper callbacks
-        content = EnterFolder(text='enter folder name', multiline=False)
-        _popup = Popup(title="Enter Folder Name", content=content, size_hint=(0.7, 0.7))
-        _popup.open()
-        print(content.text)
-        base = os.path.join(path, filename[0]) if len(filename == 1) else self.path
-        self.text = os.path.join(path, filename[0], content.text)
-        cleaner_app.output_folder = Path(self.text)
-        self.dismiss_popup()
 
 
 class OutputFolderSelector(BoxLayout):
@@ -200,8 +194,11 @@ class OutputFolderSelector(BoxLayout):
     def __init__(self, initial=None, **kwargs):
         super(OutputFolderSelector, self).__init__(**kwargs)
         self._popup = None
+        self._popup2 = None
         self.text = initial
         self.path = None
+        self.folder = ''
+        self.content = None
 
     def dismiss_popup(self):
         if self._popup:
@@ -209,9 +206,9 @@ class OutputFolderSelector(BoxLayout):
 
     def show_load(self):
         self.path = cleaner_app.output_folder if cleaner_app.output_folder else cleaner_app.input_folder.parent
-        content = AddDialog(str(self.path), new=self.new, load=self.load, cancel=self.dismiss_popup)
+        self.content = AddDialog(str(self.path), new=self.new, load=self.load, cancel=self.dismiss_popup)
 
-        self._popup = Popup(title="Load file", content=content, size_hint=(0.9, 0.9))
+        self._popup = Popup(title="Select Output Folder", content=self.content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def load(self, path, filename):
@@ -220,15 +217,24 @@ class OutputFolderSelector(BoxLayout):
         self.dismiss_popup()
 
     def new(self, path, filename):
-        # This is blocking - should use proper callbacks
-        content = EnterFolder(text='enter folder name', multiline=False)
-        self._popup2 = Popup(title="Enter Folder Name", content=content, size_hint=(0.7, 0.7))
+        content = EnterFolder(multiline=False, text='', hint_text='<Enter> to select')
+        content.bind(on_text_validate=self.on_enter)
+        self._popup2 = Popup(title="Folder Name", content=content, size_hint=(0.7, 0.2))
         self._popup2.open()
-        print(content.text)
-        base = os.path.join(path, filename[0]) if len(filename == 1) else self.path
-        self.text = os.path.join(path, filename[0], content.text)
-        cleaner_app.output_folder = Path(self.text)
-        self.dismiss_popup()
+
+    def on_enter(self, value):
+        if not value.text:
+            dismiss_dialog("You must enter a value for the new folder name,   select cancel if you changed your mind")
+        if len(self.content.filechooser.selection) == 1:
+            new_path = Path(self.content.filechooser.selection[0]).joinpath(value.text)
+        else:
+            new_path = self.path.joinpath(value.text)
+
+        os.mkdir(new_path) if not new_path.exists() else None
+        cleaner_app.output_folder = new_path
+        self.text = str(new_path)
+        self._popup2.dismiss()
+        self._popup.dismiss()
 
 
 class InputFolderSelector(BoxLayout):
@@ -238,16 +244,25 @@ class InputFolderSelector(BoxLayout):
         self.text = ''
         self.cont = continue_config
         self._popup = None
-        pass
 
     def dismiss_popup(self):
         if self._popup:
             self._popup.dismiss()
 
+
+    def selected(self, path, filename):
+        pass
+        #if len(filename) == 1:
+        #    self.text = os.path.join(path, filename[0])
+        #    cleaner_app.input_folder = Path(self.text)
+        #    cleaner_app.output_folder = cleaner_app.input_folder.parent
+        #    self.cont(self.text)
+        #self.dismiss_popup()
+
     def show_load(self):
-        path_str = str(cleaner_app.input_folder) if cleaner_app.input_folder else '/'
+        path_str = str(cleaner_app.input_folder) if cleaner_app.input_folder else str(Path.home())
         content = LoadDialog(path_str, load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Load file", content=content, size_hint=(0.9, 0.9))
+        self._popup = Popup(title="Select Folder", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def load(self, path, filename):
@@ -263,6 +278,7 @@ class ConfigScreen(Screen):
     def __init__(self, config_directory, **kwargs):
         super(ConfigScreen, self).__init__(**kwargs)
 
+        dismiss_dialog('testing')
         self.settings_dir = config_directory
         self.config_complete = False
 
@@ -282,11 +298,12 @@ class ConfigScreen(Screen):
 
         self.screen_root.add_widget(self.inputs)
         self.screen_root.add_widget(Label(text=''))
+        DismissDialog('try this')
 
     def other(self, text):
         if not self.config_complete:
             self.screen_root.remove_widget(self.screen_root.children[0])
-            self.outputs.text = self.inputs.text
+            self.outputs.text = str(cleaner_app.output_folder)
             self.screen_root.add_widget(self.outputs)
             self.screen_root.add_widget(self.paranoid_selector)
             self.screen_root.add_widget(self.verbose_selector)
