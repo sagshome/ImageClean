@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import types
 from random import randint
 from pathlib import Path
 from kivy.app import App
@@ -18,16 +19,13 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.factory import Factory
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
 
 from kivy.uix.button import Button
 
 from Backend.Cleaner import ImageClean, FileCleaner
 
 verbose = False
-
-#screen_manager = ScreenManager()
-#screen_manager.add_widget(Screen(name='config'))
-#screen_manager.add_widget(Screen(name='processing'))
 
 app_path = Path(sys.argv[0])
 app_name = app_path.name[:len(app_path.name) - len(app_path.suffix)]
@@ -46,6 +44,22 @@ logger.addHandler(fh)
 
 cleaner_app = ImageClean(app_name)
 
+
+def override_print(self, text):
+    """
+    This method will take print statements from cleaner_app and redirect to this method (which should print into
+    a textBox
+    :param self:  (of cleaner_app)
+    :param text:  (what we want to display)
+    :return:
+    """
+    if self.verbose:
+        print(text)
+
+
+cleaner_app.print = types.MethodType(override_print, cleaner_app)
+
+
 if debugging:
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
@@ -54,9 +68,6 @@ if debugging:
 else:
     logger.setLevel(level=logging.ERROR)
 
-def my_callback(instance):
-    print('Popup', instance, 'is being dismissed but is prevented!')
-    return True
 
 def dismiss_dialog(text):
 
@@ -77,17 +88,6 @@ class DismissDialog(BoxLayout):
 
     def dismiss(self):
         self.popup.dismiss()
-
-
-
-class CheckBoxItemLabel(Label):
-    def __init__(self, **kwargs):
-        super(CheckBoxItemLabel, self).__init__(**kwargs)
-
-
-class CheckBoxItemCheckBox(CheckBox):
-    def __init__(self, **kwargs):
-        super(CheckBoxItemCheckBox, self).__init__(**kwargs)
 
 
 class CheckBoxItem(BoxLayout):
@@ -129,12 +129,6 @@ class LoadDialog(FloatLayout):
         print(path, filename)
 
     load = ObjectProperty(None)
-    cancel = ObjectProperty(None)
-
-
-class SaveDialog(FloatLayout):
-    save = ObjectProperty(None)
-    text_input = ObjectProperty(None)
     cancel = ObjectProperty(None)
 
 
@@ -188,7 +182,6 @@ class EnterFolder(TextInput):
     pass
 
 
-
 class OutputFolderSelector(BoxLayout):
 
     def __init__(self, initial=None, **kwargs):
@@ -239,25 +232,16 @@ class OutputFolderSelector(BoxLayout):
 
 class InputFolderSelector(BoxLayout):
 
-    def __init__(self, continue_config=None, **kwargs):
+    def __init__(self, **kwargs):
         super(InputFolderSelector, self).__init__(**kwargs)
-        self.text = ''
-        self.cont = continue_config
+        self.text = 'Select Input Folder'
+        self.result = ''
+        self.cont = None
         self._popup = None
 
     def dismiss_popup(self):
         if self._popup:
             self._popup.dismiss()
-
-
-    def selected(self, path, filename):
-        pass
-        #if len(filename) == 1:
-        #    self.text = os.path.join(path, filename[0])
-        #    cleaner_app.input_folder = Path(self.text)
-        #    cleaner_app.output_folder = cleaner_app.input_folder.parent
-        #    self.cont(self.text)
-        #self.dismiss_popup()
 
     def show_load(self):
         path_str = str(cleaner_app.input_folder) if cleaner_app.input_folder else str(Path.home())
@@ -267,22 +251,19 @@ class InputFolderSelector(BoxLayout):
 
     def load(self, path, filename):
         if len(filename) == 1:
-            self.text = os.path.join(path, filename[0])
-            cleaner_app.input_folder = Path(self.text)
+            self.result = os.path.join(path, filename[0])
+            cleaner_app.input_folder = Path(self.result)
             cleaner_app.output_folder = cleaner_app.input_folder.parent
-            self.cont(self.text)
+            self.parent.other(self.text)
         self.dismiss_popup()
 
+class GoButton(Button):
+    pass
 
-class ConfigScreen(Screen):
-    def __init__(self, config_directory, **kwargs):
-        super(ConfigScreen, self).__init__(**kwargs)
+class MainScreen(BoxLayout):
+    def __init__(self, **kwargs):
+        super(MainScreen, self).__init__(**kwargs)
 
-        dismiss_dialog('testing')
-        self.settings_dir = config_directory
-        self.config_complete = False
-
-        self.screen_root = self.children[0]
         self.paranoid_selector = CheckBoxItem('Paranoid mode - Do not remove anything', False, self.check_paranoid)
         self.verbose_selector = CheckBoxItem('Verbose - keep me in the loop', False, self.check_verbose)
         self.recreate_selector = CheckBoxItem('Recreate - recreate output folder', False, self.check_recreate)
@@ -291,31 +272,29 @@ class ConfigScreen(Screen):
         self.keep_converted_selector = CheckBoxItem('Keep Converted - Converted files are preserved', False, self.check_keep_converted)
         self.keep_original_selector = CheckBoxItem('Keep Original - when files are moved (to a differant output path) keep the originals', False, self.check_keep_original)
 
-        self.inputs = InputFolderSelector(continue_config=self.other)
+        self.inputs = InputFolderSelector()
         self.outputs = OutputFolderSelector(initial='')
         self.extras = IgnoreFoldersSelector()
         self.skip_name = SkipFoldersSelector()
 
-        self.screen_root.add_widget(self.inputs)
-        self.screen_root.add_widget(Label(text=''))
-        DismissDialog('try this')
+        self.add_widget(self.inputs)
+        self.add_widget(Label(text=''))
 
     def other(self, text):
-        if not self.config_complete:
-            self.screen_root.remove_widget(self.screen_root.children[0])
-            self.outputs.text = str(cleaner_app.output_folder)
-            self.screen_root.add_widget(self.outputs)
-            self.screen_root.add_widget(self.paranoid_selector)
-            self.screen_root.add_widget(self.verbose_selector)
-            self.screen_root.add_widget(self.recreate_selector)
-            self.screen_root.add_widget(self.keep_dups_selector)
-            self.screen_root.add_widget(self.keep_clips_selector)
-            self.screen_root.add_widget(self.keep_converted_selector)
-            self.screen_root.add_widget(self.keep_original_selector)
-            self.screen_root.add_widget(self.extras)
-            self.screen_root.add_widget(self.skip_name)
-            self.screen_root.add_widget(Button(text='Go'))
-            self.config_complete = True
+        self.remove_widget(self.children[0])
+        self.outputs.text = str(cleaner_app.output_folder)
+        self.add_widget(self.outputs)
+        self.add_widget(self.paranoid_selector)
+        self.add_widget(self.verbose_selector)
+        self.add_widget(self.recreate_selector)
+        self.add_widget(self.keep_dups_selector)
+        self.add_widget(self.keep_clips_selector)
+        self.add_widget(self.keep_converted_selector)
+        self.add_widget(self.keep_original_selector)
+        self.add_widget(self.extras)
+        self.add_widget(self.skip_name)
+        self.add_widget(Button(text='Go', on_press=self.start_processing))
+        #self.add_widget(GoButton())
 
     def check_paranoid(self, touch):
         cleaner_app.set_paranoid(touch)
@@ -365,23 +344,24 @@ class ConfigScreen(Screen):
     def log_hit(checkbox, value):
         pass
 
+    def start_processing(self, value):
+        self.write_config()
+        self.clear_widgets()
+
+        pass
 
 class ProcessingScreen(Screen):
-    pass
+
 
 
 class ImageCleanApp(App):
 
     def build(self):
-        screen_manager = ScreenManager()
-        screen_manager.add_widget(ConfigScreen(self.user_data_dir, name='config'))
-        screen_manager.add_widget(ProcessingScreen(name='processing'))
-        return screen_manager
+        #screen_manager = ScreenManager()
+        #screen_manager.add_widget(ConfigScreen(self.user_data_dir, name='config'))
+        #screen_manager.add_widget(ProcessingScreen(name='processing'))
+        return MainScreen()
 
-
-#Factory.register('Root', cls=InputSelector)
-#Factory.register('LoadDialog', cls=LoadDialog)
-#Factory.register('SaveDialog', cls=SaveDialog)
 
 if __name__ == '__main__':
 

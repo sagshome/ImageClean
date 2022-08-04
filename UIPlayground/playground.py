@@ -1,64 +1,62 @@
 from kivy.app import App
-from kivy.uix.floatlayout import FloatLayout
-from kivy.factory import Factory
-from kivy.properties import ObjectProperty
-from kivy.uix.popup import Popup
+from kivy.uix.boxlayout import BoxLayout
+from kivy.lang.builder import Builder
 
-import os
+kv = """
+<OtherClass>:
+    root_widget: 'Root Widget Property - From KV code'
+    BoxLayout:
+        orientation: 'vertical'
+        parent_widget: "Button's Parent Widget Property (BoxLayout in KV Code)"
+        Label:
+            text: "Object References"
+        Button:
+            text: str(root.parent)
+        Button:
+            text: str(app)
+        Button:
+            text: str(root)
+        Button:
+            text: str(root.children)
+        Button:
+            text: str(self)
+        Button:
+            text: str(self.children)
+        Label:
+            text: "Property References"
+        Button:
+            text: app.main_app_class
+        Button:
+            text: app.root
+        Button:
+            text: root.other_class_property
+        Button:
+            text: root.root_widget
+        Button:
+            text: self.parent.parent_widget
+        Button:
+            self_widget: 'Self Widget Property (Button in KV Code)'
+            text: self.self_widget
+        Button:
+            text: str(self.children[0].child_label_widget)
+            Label:
+                child_label_widget: "Button's Child Widget Property (Label in KV Code)"   
+"""
 
-
-class LoadDialog(FloatLayout):
-    load = ObjectProperty(None)
-    cancel = ObjectProperty(None)
-
-
-class SaveDialog(FloatLayout):
-    save = ObjectProperty(None)
-    text_input = ObjectProperty(None)
-    cancel = ObjectProperty(None)
-
-
-class Root(FloatLayout):
-    loadfile = ObjectProperty(None)
-    savefile = ObjectProperty(None)
-    text_input = ObjectProperty(None)
-
-    def dismiss_popup(self):
-        self._popup.dismiss()
-
-    def show_load(self):
-        content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Load file", content=content,
-                            size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def show_save(self):
-        content = SaveDialog(save=self.save, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Save file", content=content,
-                            size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        with open(os.path.join(path, filename[0])) as stream:
-            self.text_input.text = stream.read()
-
-        self.dismiss_popup()
-
-    def save(self, path, filename):
-        with open(os.path.join(path, filename), 'w') as stream:
-            stream.write(self.text_input.text)
-
-        self.dismiss_popup()
+Builder.load_string(kv)
 
 
-class Playground(App):
-    pass
+class OtherClass(BoxLayout):
+    other_class_property = 'Other Class Property - From Python Code'
 
 
-Factory.register('Root', cls=Root)
-Factory.register('LoadDialog', cls=LoadDialog)
-Factory.register('SaveDialog', cls=SaveDialog)
+class Main(App):
+    main_app_class = 'Main App Class Property - From Python Code'
+
+    def build(self):
+        # Have to specify self.root otherwise it doesn't exist
+        self.root = "Main App Class Root"
+        return OtherClass()
 
 
-if __name__ == '__main__':
-    Playground().run()
+Main().run()

@@ -880,6 +880,10 @@ class ImageClean:
         self.duplicate_path = None
         self.image_movies_path = None
 
+    def print(self, text):
+        if self.verbose:
+            print(text)
+
     def set_recreate(self, value: bool):
         self.config['recreate'] = value
 
@@ -1028,10 +1032,10 @@ class ImageClean:
                     for suffix in file_entry.all_images:
                         if FileCleaner(Path(f'{just_name}{suffix}')).is_registered():
                             if self.image_movies_path:
-                                print(f'.... Saving Clip {file_entry.path}')
+                                self.print(f'.... Saving Clip {file_entry.path}')
                                 file_entry.relocate_file(self.image_movies_path, remove=True)
                             else:
-                                print(f'.... Removing Clip {file_entry.path}')
+                                self.print(f'.... Removing Clip {file_entry.path}')
                                 os.unlink(file_entry.path)
                             break
 
@@ -1043,11 +1047,11 @@ class ImageClean:
                 self.audit_folders(entry)
                 size = len(os.listdir(entry))
                 if size == 0:
-                    print(f'  Removing empty folder {entry}') if self.verbose else None
+                    self.print(f'  Removing empty folder {entry}')
                     os.rmdir(entry)
                 elif size > WARNING_FOLDER_SIZE:
                     large_folders.append(entry)
-                    print(f'  VERY large folder ({size}) found {entry}')
+                    self.print(f'  VERY large folder ({size}) found {entry}')
         return large_folders
 
     def process_file(self, entry: Union[FileCleaner, ImageCleaner]):
@@ -1059,7 +1063,7 @@ class ImageClean:
 
         :param entry: Cleaner object,  promoted to a subclass when processed
         """
-        print(f'.. File: {entry.path}') if self.verbose else None
+        self.print(f'.. File: {entry.path}')
 
         if not entry.is_valid:
             logger.debug(f'Invalid file {entry.path}')
@@ -1103,7 +1107,7 @@ class ImageClean:
             assert False, f'Invalid test result {dup_result}'
 
     def process_folder(self, folder: FolderCleaner):
-        print(f'. Folder: {folder.path}') if self.verbose else None
+        self.print(f'. Folder: {folder.path}')
         for entry in folder.path.iterdir():
             if entry.is_dir() and entry not in self.ignore_folders:
                 this_folder = FolderCleaner(Path(entry), parent=folder)

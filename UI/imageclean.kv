@@ -1,49 +1,53 @@
 #:kivy 2.1.0
+
+<MainScreen>:  # This is a BoxLayout
+    orientation: 'vertical'
+    canvas.before:
+        Color:
+            rgba: 0.5, 0.5, 0.5, 1
+        Rectangle:
+            # self here refers to the widget i.e BoxLayout
+            pos: self.pos
+            size: self.size
+
+<GoButton>:
+    Button:
+        text: "GoGo"
+        on_press: root.parent.start_processing()
+
+
 <DismissDialog>:
     # Reusable dialog to display warnings/errors/info
-
     BoxLayout:
         size_hint: 0.6, 0.6
         pos_hint: {'right': 1, 'center': 0.5}
-
-        #pos_hint: {"x":0.2, "top":center}
-
         orientation: 'vertical'
         Label:
             text: root.error_text
-            #size_hint: 0.6, 0.2
-            #pos_hint: {"x":0.2, "top":1}
-
         Button:
             text: "Dismiss"
-            #size_hint: 0.2, 0.2
-            #pos_hint: {"x":0.45, "y":0.4}
             on_release:
                 root.dismiss()
 
 <CheckBoxItem>:
-    id: _container
-    text: 'Initial'
+    text: ''
     selected: False
-    callback: None
     size_hint: 1.0, 0.1
 
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
-            text: 'foobar'
             size_hint: 0.1, 1.0
             pos_hint: {'right': 1, 'center': 0.5}
-            active: _container.selected
+            active: root.selected
             on_active: root.log_hit(self.active)
-
         Label:
             size_hint: 0.9, 1.0
             pos_hint: {'center': 1}
             texture_size: self.size
             text_size: self.size
             halign: 'left'
-            text: _container.text
+            text: root.text
 
 <IgnoreFoldersSelector>:
     id: _container
@@ -120,28 +124,19 @@
             padding_x: 10
 
 <InputFolderSelector>:
-    #input_label: iLabel
-    #input_button: iButton
-    id: _container
     text: ''
-    selected: False
-    callback: None
+    result: ''
     size_hint: 1.0, 0.1
 
     BoxLayout:
         orientation: 'horizontal'
-
         Button:
-            id: _iButton
-            text: "Select Input Folder"
+            text: root.text
             size_hint: 0.2, 1.0
             pos_hint: {'center': 1}
-            # active: _container.selected
             on_press: root.show_load()
-
         Label:
-            id: iLabel
-            text: _container.text
+            text: root.result
             size_hint: 0.7, 1.0
             pos_hint: {'right': 1, 'center': 0.5}
             texture_size: self.size
@@ -149,62 +144,24 @@
             halign: 'left'
             padding_x: 10
 
-
-<ConfigScreen>:
-    canvas.before:
-        Color:
-            rgba: 0.5, 0.5, 0.5, 1
-        Rectangle:
-            # self here refers to the widget i.e FloatLayout
-            pos: self.pos
-            size: self.size
-    BoxLayout:
-        orientation: 'vertical'
-
-<ProcessingScreen>:
-    canvas.before:
-        Color:
-            rgba: 1, 1, 0, 1
-        Rectangle:
-            # self here refers to the widget i.e FloatLayout
-            pos: self.pos
-            size: self.size
-    Button:
-        text: 'GoodBye!!'
-        size_hint: 0.8, 0.1
-        pos_hint: {'left': 0, 'top': 1}
-
-    Button:
-        text: 'bb'
-        size_hint: 0.2, 0.1
-        pos_hint: {'right': 1, 'top': 1}
-
-    Button:
-        text: 'Solong!!'
-        size_hint: 0.8, 0.1
-        pos_hint: {'left': 0.8, 'top': .9}
-    Button:
-        text: 'cc'
-        size_hint: 0.2, 0.1
-        pos_hint: {'right': 1, 'top': .9}
-
 <LoadDialog>:
     id: _load_dialog
-    filechooser: filechooser
+    filechooser: file_chooser
     BoxLayout:
         size: root.size
         pos: root.pos
         orientation: "vertical"
         FileChooserListView:
-            id: filechooser
+            id: file_chooser
             dirselect: True
+            filters: ['']
 
         BoxLayout:
             size_hint_y: None
             height: 30
             Button:
                 text: "Select"
-                on_release: root.load(filechooser.path, filechooser.selection)
+                on_release: root.load(file_chooser.path, file_chooser.selection)
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
@@ -219,7 +176,7 @@
         FileChooserListView:
             id: filechooser
             dirselect: True
-
+            filters: ['']
         BoxLayout:
             size_hint_y: None
             height: 30
