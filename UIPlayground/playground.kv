@@ -1,73 +1,39 @@
 #:kivy 2.1.0
 
-Root:
-    text_input: text_input
-
+<Progress>:
+    progress_bar: progress_bar
+    progress_summary: progress_summary
+    progress_text: progress_text
     BoxLayout:
         orientation: 'vertical'
+        size: root.width, root.height
+        Button:
+            id: go_button
+            size_hint_y: .15
+            text: "Go"
+            on_release: root.start_clock()
+        Label:
+            size_hint_y:.05
+            halign: 'center'
+            text: "Progress"
+        ProgressBar:
+            id: progress_bar
+            #min: 0
+            #max: app.input_files
+            max: 1000.0
+            #value: 22
+            #value: 0
+            pos_hint: {'x': .1}
+            size_hint_x: .8
+            size_hint_y: .1
         BoxLayout:
-            size_hint_y: None
-            height: 30
-            Button:
-                text: 'Load'
-                on_release: root.show_load()
-            Button:
-                text: 'Save'
-                on_release: root.show_save()
-
-        BoxLayout:
+            id: progress_text
+            orientation: 'horizontal'
             TextInput:
-                id: text_input
-                text: ''
+                id: progress_summary
+            TextInput:
+                id: progress_text
+        Button:
+            size_hint_y: .1
+            text: "Abort"
 
-            RstDocument:
-                text: text_input.text
-                show_errors: True
-
-<LoadDialog>:
-    BoxLayout:
-        size: root.size
-        pos: root.pos
-        orientation: "vertical"
-        FileChooserListView:
-            id: filechooser
-
-        BoxLayout:
-            size_hint_y: None
-            height: 30
-
-            Button:
-                text: "Select"
-                on_release: root.load(filechooser.path, filechooser.selection)
-
-            Button:
-                text: "Cancel"
-                on_release: root.cancel()
-
-
-<SaveDialog>:
-    text_input: text_input
-    BoxLayout:
-        size: root.size
-        pos: root.pos
-        orientation: "vertical"
-        FileChooserListView:
-            id: filechooser
-            on_selection: text_input.text = self.selection and self.selection[0] or ''
-
-        TextInput:
-            id: text_input
-            size_hint_y: None
-            height: 30
-            multiline: False
-
-        BoxLayout:
-            size_hint_y: None
-            height: 30
-            Button:
-                text: "Cancel"
-                on_release: root.cancel()
-
-            Button:
-                text: "Save"
-                on_release: root.save(filechooser.path, text_input.text)

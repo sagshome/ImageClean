@@ -1,6 +1,6 @@
-import imghdr
 import logging
 import os
+import pickle
 import re
 
 import piexif
@@ -185,7 +185,8 @@ class Cleaner:
         else:
             logger.error(f'Try to un_register {file_path}(not registered)')
 
-    def get_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False, alternate_path: Path = None) \
+    def get_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False,
+                       alternate_path: Path = None) \
             -> Optional[FileCT]:
 
         key = self.registry_key
@@ -532,8 +533,12 @@ class ImageCleaner(Cleaner):
                 self.open_image()
                 opened = True
             if self._image:
-                for val in self._image.getdata().split():
-                    self._image_data.append(val.histogram())
+                try:
+                    for val in self._image.getdata().split():
+                        self._image_data.append(val.histogram())
+                except OSError:  # Invalid Image
+                    logger.error(f'Warning - failed to read image: {self.path}')
+                    self._image = None
         if opened:
             self.close_image()
 
@@ -847,63 +852,128 @@ class FolderCleaner(Cleaner):
 
 class ImageClean:
 
-    def __init__(self, app: str, **kwargs):
+    def __init__(self, app: str, restore=False, **kwargs):
         self.app_name = app
-        self.config = {
-            'recreate': False,
-            'keep_duplicates': False,
-            'keep_movie_clips': False,
-            'keep_converted_files': False,
-            'keep_original_files': False,
-        }
+        run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
+        if not run_path.exists():
+            os.makedirs(run_path, mode=511, exist_ok=True)
+        self.conf_file = run_path.joinpath('config.pickle')
 
-        for key in kwargs:
-            if key in self.config:
-                # todo: call the actual function
-                self.config[key] = kwargs[key]
+        # Default option/values
+        self.input_folder = Path.home()
+        self.output_folder = Path.home()
+        self.verbose = True
+        self.do_convert = True  # todo: Provide an option for this
+        self.recreate = False
+        self.keep_duplicates = False
+        self.keep_movie_clips = False
+        self.process_all_files = True  # todo: re-evaluate this
+        self.keep_converted_files = False
+        self.keep_original_files = False
+        self.ignore_folders = []
+        self.bad_parents = []
+        self.progress = 0
+
+        if restore:  # Used by UI
+            try:
+                f = open(self.conf_file, 'rb')
+                temp = pickle.load(f)
+                self.process_args(temp)
+            except FileNotFoundError:
+                pass
+        else:  # Used by cmdline
+            self.process_args(kwargs)
 
         self.duplicate_path_base = f'{self.app_name}_Duplicates'
         self.movie_path_base = f'{self.app_name}_Clips'
         self.converted_path_base = f'{self.app_name}_Converted'
 
         self.process_all_files = False
-        self.verbose = False
         self.in_place = False
-        self.prepared = False
-        self.output_folder = None
-        self.input_folder = None
-        self.ignore_folders = []
-        self.bad_parents = []
         self.no_date_path = None
         self.small_path = None
         self.migrated_path = None
         self.duplicate_path = None
         self.image_movies_path = None
 
+    def process_args(self, kwargs: dict):
+        for key in kwargs:
+            if key == 'verbose':
+                self.verbose = kwargs[key]
+            elif key == 'recreate':
+                self.recreate = kwargs[key]
+            elif key == 'do_convert':
+                self.do_convert = kwargs[key]
+            elif key == 'input':
+                self.input_folder = kwargs[key]
+            elif key == 'output':
+                self.output_folder = kwargs[key]
+            elif key == 'keep_duplicates':
+                self.keep_duplicates = kwargs[key]
+            elif key == 'keep_clips':
+                self.keep_movie_clips = kwargs[key]
+            elif key == 'keep_conversions':
+                self.keep_converted_files = kwargs[key]
+            elif key == 'keep_originals':
+                self.keep_original_files = kwargs[key]
+            elif key == 'ignore_folders':
+                for value in kwargs[key]:
+                    self.ignore_folders.append(value)
+            elif key == 'bad_parents':
+                for value in kwargs[key]:
+                    self.bad_parents.append(value)
+            else:
+                assert False, f'Invalid option supplied: {key}'
+
+    def save_config(self):
+        config = {'verbose': self.verbose,
+                  'recreate': self.recreate,
+                  'do_convert': self.do_convert,
+                  'input': self.input_folder,
+                  'output': self.output_folder,
+                  'keep_duplicates': self.keep_duplicates,
+                  'keep_clips': self.keep_movie_clips,
+                  'keep_conversions': self.keep_converted_files,
+                  'keep_originals': self.keep_original_files,
+                  'ignore_folders': self.ignore_folders,
+                  'bad_parents': self.bad_parents,
+                  }
+        with open(self.conf_file, 'wb') as f:
+            pickle.dump(config, f, pickle.HIGHEST_PROTOCOL)
+
     def print(self, text):
         if self.verbose:
             print(text)
 
+    def increment_progress(self):
+        self.progress += 1
+
     def set_recreate(self, value: bool):
-        self.config['recreate'] = value
+        self.recreate = value
 
     def set_keep_duplicates(self, value: bool):
-        self.config['keep_duplicates'] = value
+        self.keep_duplicates = value
 
     def set_keep_movie_clips(self, value: bool):
-        self.config['keep_movie_clips'] = value
+        self.keep_movie_clips = value
 
     def set_keep_converted_files(self, value: bool):
-        self.config['keep_converted_files'] = value
+        self.keep_converted_files = value
 
     def set_keep_original_files(self, value: bool):
-        self.config['keep_original_files'] = value
+        self.keep_original_files = value
 
     def add_ignore_folder(self, value: Path):
-        self.ignore_folders.append(value)
+        if value not in self.ignore_folders:
+            self.ignore_folders.append(value)
+            return True
+        return False
 
-    def add_bad_parents(self, value: Path):
-        self.bad_parents.append(value)
+    def add_bad_parents(self, value: str):
+        if value not in self.bad_parents:
+            self.bad_parents.append(value)
+            return True
+        return False
 
     def set_paranoid(self, value: bool):
         self.set_keep_duplicates(value)
@@ -912,13 +982,12 @@ class ImageClean:
         self.set_keep_movie_clips(value)
 
     def prepare(self):
-        self.prepared = True
 
         if not self.output_folder:
             self.output_folder = self.input_folder
 
         if self.output_folder == self.input_folder:
-            if self.config['recreate']:
+            if self.recreate:
                 assert False, f'Can not recreate with same input/output folders: {self.input_folder}\n\n'
             self.in_place = True
 
@@ -930,22 +999,21 @@ class ImageClean:
 
         self.no_date_path = self.output_folder.joinpath(f'{self.app_name}_NoDate')
         self.small_path = self.output_folder.joinpath(f'{self.app_name}_Small')
-        if self.config['keep_converted_files']:
+        if self.keep_converted_files:
             self.output_folder.joinpath(f'{self.app_name}_Migrated')
 
-        if self.config['keep_duplicates']:
+        if self.keep_duplicates:
             self.duplicate_path = self.output_folder.joinpath(f'{self.app_name}_Duplicates')
 
-        if self.config['keep_movie_clips']:
+        if self.keep_movie_clips:
             self.output_folder.joinpath(f'{self.app_name}_ImageMovies')
-
 
         # Backup any previous attempts
 
-        if not self.config['recreate'] or self.in_place:  # Same root or importing from a new location
+        if not self.recreate or self.in_place:  # Same root or importing from a new location
             self.register_files(self.output_folder, self.output_folder)
 
-        if self.config['recreate']:
+        if self.recreate:
             if self.output_folder.exists():
                 os.rename(self.output_folder, f'{self.output_folder}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
 
@@ -1039,7 +1107,6 @@ class ImageClean:
                                 os.unlink(file_entry.path)
                             break
 
-
     def audit_folders(self, path: Path) -> List[Path]:
         large_folders = []
         for entry in path.iterdir():
@@ -1064,12 +1131,13 @@ class ImageClean:
         :param entry: Cleaner object,  promoted to a subclass when processed
         """
         self.print(f'.. File: {entry.path}')
+        self.increment_progress()
 
         if not entry.is_valid:
             logger.debug(f'Invalid file {entry.path}')
             return
 
-        new_entry = entry.convert(self.migrated_path, remove=self.config['keep_original_files'] and not self.in_place)
+        new_entry = entry.convert(self.migrated_path, remove=self.keep_original_files and not self.in_place)
         if id(new_entry) != id(entry):  # The file was converted and cleaned up
             entry = new_entry  # work on the converted file
 
@@ -1091,16 +1159,16 @@ class ImageClean:
         dup_result = self.duplicates_test(entry)
         logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
         if dup_result == NEW_FILE:  # We have not seen this file before
-            entry.relocate_file(new_path, register=True, remove=not self.config['keep_original_files'] or self.in_place, rollover=True)
+            entry.relocate_file(new_path, register=True, remove=not self.keep_original_files or self.in_place, rollover=True)
         elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
-            entry.relocate_file(entry.get_new_path(self.small_path), remove=not self.config['keep_original_files'], rollover=False)
+            entry.relocate_file(entry.get_new_path(self.small_path), remove=not self.keep_original_files, rollover=False)
         elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
             existing = self.duplicate_get(entry)
             if dup_result in (LESSER_FILE, EXACT_FILE):
-                entry.relocate_file(entry.get_new_path(self.duplicate_path), remove=not self.config['keep_original_files'] or self.in_place,
+                entry.relocate_file(entry.get_new_path(self.duplicate_path), remove=not self.keep_original_files or self.in_place,
                                     create_dir=False, rollover=False)
             elif dup_result == GREATER_FILE:
-                existing.relocate_file(existing.get_new_path(self.duplicate_path), remove=not self.config['keep_original_files'],
+                existing.relocate_file(existing.get_new_path(self.duplicate_path), remove=not self.keep_original_files,
                                        create_dir=False, rollover=False)
                 entry.relocate_file(new_path, register=True, remove=self.in_place, rollover=False)
         else:

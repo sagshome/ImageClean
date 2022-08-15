@@ -1,62 +1,35 @@
+from kivy.uix.widget import Widget
+from kivy.properties import ObjectProperty
 from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.lang.builder import Builder
-
-kv = """
-<OtherClass>:
-    root_widget: 'Root Widget Property - From KV code'
-    BoxLayout:
-        orientation: 'vertical'
-        parent_widget: "Button's Parent Widget Property (BoxLayout in KV Code)"
-        Label:
-            text: "Object References"
-        Button:
-            text: str(root.parent)
-        Button:
-            text: str(app)
-        Button:
-            text: str(root)
-        Button:
-            text: str(root.children)
-        Button:
-            text: str(self)
-        Button:
-            text: str(self.children)
-        Label:
-            text: "Property References"
-        Button:
-            text: app.main_app_class
-        Button:
-            text: app.root
-        Button:
-            text: root.other_class_property
-        Button:
-            text: root.root_widget
-        Button:
-            text: self.parent.parent_widget
-        Button:
-            self_widget: 'Self Widget Property (Button in KV Code)'
-            text: self.self_widget
-        Button:
-            text: str(self.children[0].child_label_widget)
-            Label:
-                child_label_widget: "Button's Child Widget Property (Label in KV Code)"   
-"""
-
-Builder.load_string(kv)
+from kivy.clock import Clock
 
 
-class OtherClass(BoxLayout):
-    other_class_property = 'Other Class Property - From Python Code'
+class Progress(Widget):
+    progress_bar = ObjectProperty(None)
+    progress_summary = ObjectProperty(None)
+    progress_text = ObjectProperty(None)
+
+    def update_progress(self, count):
+        print('Count is....:', count)
+        # self.progess_bar.value = cleaner_app.progress
+        value = self.progress_bar.value
+        self.progress_bar.value = value + 100
+        print(f'{self.progress_bar.value} out of {self.progress_bar.max}')
+
+    def set_summary(self, kwargs):
+        print('kwargs are....:')
+        self.progress_summary.text = f"Summary:\n\nInputFolder:1000"
+        self.progress_text.text = "Results:\n\n"
+
+    def start_clock(self):
+        Clock.schedule_interval(self.update_progress, 2.0)
 
 
-class Main(App):
-    main_app_class = 'Main App Class Property - From Python Code'
+class PlaygroundApp(App):
 
     def build(self):
-        # Have to specify self.root otherwise it doesn't exist
-        self.root = "Main App Class Root"
-        return OtherClass()
+        return Progress()
 
-
-Main().run()
+if __name__ == '__main__':
+    my_app = PlaygroundApp()
+    my_app.run()

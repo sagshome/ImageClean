@@ -14,7 +14,7 @@ from Backend.Cleaner import FileCleaner, ImageCleaner, FolderCleaner, file_clean
 app_path = Path(sys.argv[0])
 app_name = app_path.name[:len(app_path.name) - len(app_path.suffix)]
 
-app = ImageClean(app_name)
+app = ImageClean(app_name)  # Sets all default values
 
 app_help = f'{app_name} -hdmsaruPV -i <ignore_folder>... -n <non_description_folder>... -o <output> input_folder\n' \
            f'Used to clean up directories.' \
@@ -89,17 +89,17 @@ if __name__ == '__main__':
             print(app_help)
             sys.exit(2)
         elif opt == '-r':
-            app.set_recreate(True)
+            app.recreate = True
         elif opt == '-d':
-            app.set_keep_duplicates(True)
+            app.keep_duplicates = True
         elif opt == '-m':
-            app.set_keep_movie_clips(True)
+            app.keep_movie_clips = True
         elif opt == '-a':
             app.process_all_files = True
         elif opt == '-c':
-            app.set_keep_converted_files(True)
+            app.keep_converted_files = True
         elif opt == '-s':
-            app.set_keep_original_files(True)
+            app.keep_original_files = True
         elif opt == '-o':
             app.output_folder = Path(arg)
         elif opt == '-i':
@@ -122,7 +122,6 @@ if __name__ == '__main__':
                            root_folder=app.input_folder,
                            output_folder=app.output_folder,
                            no_date_folder=app.no_date_path)
-
     master.description = None
     app.prepare()
     app.process_folder(master)

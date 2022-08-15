@@ -1,31 +1,101 @@
 #:kivy 2.1.0
+#:import utils kivy.utils
+
+# blue = background_color: utils.get_color_from_hex('#0E2BF1')
+# yellow = background_color: utils.get_color_from_hex('#E9F20D')
+# red = background_color: utils.get_color_from_hex('#FF0000')
+# green = background_color: utils.get_color_from_hex('#00FF00')
+
+##E9F20D
 
 <MainScreen>:  # This is a BoxLayout
     orientation: 'vertical'
-    canvas.before:
-        Color:
-            rgba: 0.5, 0.5, 0.5, 1
-        Rectangle:
-            # self here refers to the widget i.e BoxLayout
-            pos: self.pos
-            size: self.size
+    #canvas.before:
+    #    Color:
+    #        rgba: 0.5, 0.5, 0.5, 1
+    #    Rectangle:
+    #        # self here refers to the widget i.e BoxLayout
+    #        pos: self.pos
+    #        size: self.size
+    BoxLayout:
+        orientation: 'horizontal'
+        size_hint_x: 1
+        size_hint_y: .15
+        Button
+            text: 'Setup Page -> Press "Go" to process Input Folder'
+        Button:
+            text: 'Help'
+            size_hint_x: .2
+            background_color: utils.get_color_from_hex('#0E2BF1')
+            on_release: root.help()
+        Button:
+            text: 'About'
+            size_hint_x: .2
+            background_color: utils.get_color_from_hex('#00FF00')
+            on_release: root.about()
 
-<GoButton>:
+<Progress>:
+    progress_bar: progress_bar
+    progress_summary: progress_summary
+    progress_text: progress_text
+    exit_button: exit_button
+    BoxLayout:
+        orientation: 'vertical'
+        size: root.width, root.height
+        Label:
+            size_hint_y:.05
+            halign: 'center'
+            text: "Progress"
+        ProgressBar:
+            id: progress_bar
+            #max: app.input_files
+            pos_hint: {'x': .1}
+            size_hint_x: .8
+            size_hint_y: .1
+        BoxLayout:
+            id: progress_text
+            orientation: 'horizontal'
+            TextInput:
+                size_hint_x: .4
+                id: progress_summary
+            TextInput:
+                id: progress_text
+        Button:
+            id: exit_button
+            size_hint_y: .1
+            text: "Abort"
+            background_color: utils.get_color_from_hex('#FF0000')
+            on_release:
+                root.abort()
+
+
+<ActionBox>:
+    size_hint: 1.0, .2
+    padding: 10, 10
+    orientation: 'horizontal'
     Button:
-        text: "GoGo"
-        on_press: root.parent.start_processing()
+        text: "Go"
+        background_color: utils.get_color_from_hex('#00FF00')
+        on_press: root.start_processing()
+    Button:
+        text: "Cancel"
+        background_color: utils.get_color_from_hex('#FF0000')
+
+        on_release: root.parent.exit(1)
 
 
 <DismissDialog>:
     # Reusable dialog to display warnings/errors/info
     BoxLayout:
-        size_hint: 0.6, 0.6
+
         pos_hint: {'right': 1, 'center': 0.5}
         orientation: 'vertical'
         Label:
             text: root.error_text
         Button:
+            size_hint: 1, 0.2
             text: "Dismiss"
+            background_color: utils.get_color_from_hex('#0E2BF1')
             on_release:
                 root.dismiss()
 
@@ -33,11 +103,10 @@
     text: ''
     selected: False
     size_hint: 1.0, 0.1
-
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
-            size_hint: 0.1, 1.0
+            size_hint: 0.15, 1.0
             pos_hint: {'right': 1, 'center': 0.5}
             active: root.selected
             on_active: root.log_hit(self.active)
@@ -59,7 +128,8 @@
         orientation: 'horizontal'
         Button:
             text: "Add a folder\nto ignore"
-            size_hint: 0.2, 1.0
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.4, 1.0
             pos_hint: {'center': 1}
             # active: _container.selected
             on_press: root.show_load()
@@ -68,10 +138,15 @@
             do_scroll_y: True
             Label:
                 text: _container.text
-                size_hint_y: None
+                size_hint: 0.5, 1.0
                 height: self.texture_size[1]
                 text_size: self.width, None
                 padding: 10, 10
+        Button:
+            text: "Clear"
+            size_hint: 0.1, 1.0
+            background_color: utils.get_color_from_hex('#FF0000')
+            on_press: root.clear()
 
 <SkipFoldersSelector>:
     id: _container
@@ -83,7 +158,9 @@
         orientation: 'horizontal'
         Button:
             text: "Add a folder\nNAME to ignore"
-            size_hint: 0.2, 1.0
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.4, 1.0
+
             pos_hint: {'center': 1}
             # active: _container.selected
             on_press: root.show_load()
@@ -91,17 +168,20 @@
             do_scroll_x: True
             do_scroll_y: True
             Label:
+                size_hint: 0.5, 1.0
                 text: _container.text
-                size_hint_y: None
                 height: self.texture_size[1]
                 text_size: self.width, None
                 padding: 10, 10
+        Button:
+            text: "Clear"
+            size_hint: 0.1, 1.0
+            background_color: utils.get_color_from_hex('#FF0000')
+            on_press: root.clear()
+
 
 <OutputFolderSelector>:
-    id: _container
-    text: ''
-    selected: False
-    callback: None
+    result: ''
     size_hint: 1.0, 0.1
 
     BoxLayout:
@@ -109,13 +189,13 @@
 
         Button:
             text: "Change Output Folder"
-            size_hint: 0.2, 1.0
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.25, 1.0
             pos_hint: {'center': 1}
-            # active: _container.selected
             on_press: root.show_load()
 
         Label:
-            text: _container.text
+            text: root.result
             size_hint: 0.7, 1.0
             pos_hint: {'right': 1, 'center': 1}
             texture_size: self.size
@@ -131,8 +211,9 @@
     BoxLayout:
         orientation: 'horizontal'
         Button:
-            text: root.text
-            size_hint: 0.2, 1.0
+            text: "Change Input Folder"
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.25, 1.0
             pos_hint: {'center': 1}
             on_press: root.show_load()
         Label:
