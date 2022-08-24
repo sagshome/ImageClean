@@ -1,39 +1,100 @@
 #:kivy 2.1.0
+#:import utils kivy.utils
 
-<Progress>:
-    progress_bar: progress_bar
-    progress_summary: progress_summary
-    progress_text: progress_text
+<CheckBoxItem>:
+    text: ''
+    callback: None
+    check_value: False
+    size_hint: 1.0, None
+    height: 50
     BoxLayout:
-        orientation: 'vertical'
-        size: root.width, root.height
-        Button:
-            id: go_button
-            size_hint_y: .15
-            text: "Go"
-            on_release: root.start_clock()
+        orientation: 'horizontal'
+        CheckBox:
+            size_hint: 0.15, 1.0
+            pos_hint: {'right': 1, 'center': 0.5}
+            active: root.check_value
+            on_active: root.selected(self)
         Label:
-            size_hint_y:.05
-            halign: 'center'
-            text: "Progress"
-        ProgressBar:
-            id: progress_bar
-            #min: 0
-            #max: app.input_files
-            max: 1000.0
-            #value: 22
-            #value: 0
-            pos_hint: {'x': .1}
-            size_hint_x: .8
-            size_hint_y: .1
-        BoxLayout:
-            id: progress_text
-            orientation: 'horizontal'
-            TextInput:
-                id: progress_summary
-            TextInput:
-                id: progress_text
-        Button:
-            size_hint_y: .1
-            text: "Abort"
+            size_hint: 0.85, 1.0
+            pos_hint: {'center': 1}
+            texture_size: self.size
+            text_size: self.size
+            halign: 'left'
+            valign: 'center'
+            text: root.text
 
+
+<GenericFolderSelector>:
+    input_button_text: ''
+    get_label_value: ''
+    load_callback: None
+    text: ''
+    size_hint: 1.0, None
+    height: 50
+
+    BoxLayout:
+        orientation: 'horizontal'
+        Button:
+            text: root.input_button_text
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.25, 1.0
+            pos_hint: {'center': 1}
+            on_press: root.show_load()
+        Label:
+            text: root.input_label_value
+            size_hint: 0.7, 1.0
+            valign: 'center'
+            texture_size: self.size
+            text_size: self.size
+            padding_x: 10
+
+<Main>:
+    orientation: 'vertical'
+    GenericFolderSelector:
+        input_button_text: 'Select Input Folder'
+        get_label_value: self.get_input()
+        show_new_button: 0
+    GenericFolderSelector:
+        input_button_text: 'Change Output Folder'
+        get_label_value: self.get_output()
+    GenericFolderSelector:
+        size_hint: 1.0, 0.3
+        input_button_text: 'Input folders to ignore'
+        get_label_value: self.get_ignore()
+        show_new_button: 0
+        load_callback: self.set_ignore
+        allow_multiselect: True
+    CheckBoxItem:
+        text: 'Check this buddy'
+        callback: self.set_buddy
+        check_value: self.get_buddy()
+    CheckBoxItem:
+        text: 'Check this sam'
+        callback: self.set_sam
+        check_value: self.get_sam()
+
+<LoadDialog>:
+    filechooser: file_chooser
+    newbutton: new_button
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserIconView:
+            id: file_chooser
+            dirselect: True
+            filters: ['']  # Only show folders
+        BoxLayout:
+            # force 30px for the action buttons
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Select"
+                on_release: root.load(file_chooser.path, file_chooser.selection)
+            Button:
+                id: new_button
+                text: "new"
+                on_release: root.new(file_chooser.path, file_chooser.selection)
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()

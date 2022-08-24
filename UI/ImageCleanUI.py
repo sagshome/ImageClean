@@ -12,7 +12,7 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.floatlayout import FloatLayout
-from kivy.properties import ObjectProperty, StringProperty
+from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
@@ -20,23 +20,21 @@ from Backend.Cleaner import ImageClean, FileCleaner, FolderCleaner
 
 
 app_path = Path(sys.argv[0])
-app_name = app_path.name[:len(app_path.name) - len(app_path.suffix)]
-
-run_path = Path(Path.home().joinpath(f'.{app_name}'))
+run_path = Path(Path.home().joinpath(f'.{app_path.stem}'))
 os.mkdir(run_path) if not run_path.exists() else None
 
 log_file = run_path.joinpath('logfile')
-results_file = run_path.joinpath(f'{app_name}.results')
+results_file = run_path.joinpath(f'{app_path.stem}.results')
 
 if results_file.exists():
     FileCleaner.rollover_name(results_file)
-RESULTS = open(results_file, "w")
+RESULTS = open(results_file, "w+")
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_name(log_file)
 
-debugging = os.getenv(f'{app_name.upper()}_DEBUG')
-logger = logging.getLogger(app_name)
+debugging = os.getenv(f'{app_path.stem.upper()}_DEBUG')
+logger = logging.getLogger(app_path.stem)
 
 fh = logging.FileHandler(filename=str(log_file))
 fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
@@ -44,7 +42,7 @@ fh.setFormatter(fh_formatter)
 logger.addHandler(fh)
 
 # The App will run in the background,  value and queue are used for some basic info passing
-cleaner_app = ImageClean(app_name, restore=True)  # save options over each run
+cleaner_app = ImageClean(app_path.stem, restore=True)  # save options over each run
 mp_processed_value = Value("i", 0)
 mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
@@ -81,17 +79,19 @@ class DismissDialog(BoxLayout):
 
 
 class CheckBoxItem(BoxLayout):
-    def __init__(self, text, status, callback, **kwargs):
-        super(CheckBoxItem, self).__init__(**kwargs)
-        self.text = text
-        self.selected = status
-        self.callback = callback
 
-    def log_hit(self, touch):
-        if hasattr(self, 'callback'):
-            self.callback(touch)
-        else:
-            print('touched without callback')
+    def selected(self, checkbox):
+        if hasattr(self, 'callback') and self.callback:
+            self.callback(checkbox.active)
+
+    @staticmethod
+    def set_recreate(touch):
+        cleaner_app.set_recreate(touch)
+        logger.debug(f'recreate is {touch}')
+
+    @staticmethod
+    def get_recreate():
+        return cleaner_app.recreate
 
 
 class AddDialog(FloatLayout):
@@ -186,12 +186,12 @@ class EnterFolder(TextInput):
 
 
 class OutputFolderSelector(BoxLayout):
+    output_result = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(OutputFolderSelector, self).__init__(**kwargs)
         self._popup = None
         self._popup2 = None
-        self.result = str(cleaner_app.output_folder)
         self.path = None
         self.folder = ''
         self.content = None
@@ -201,15 +201,15 @@ class OutputFolderSelector(BoxLayout):
             self._popup.dismiss()
 
     def show_load(self):
-        self.path = cleaner_app.output_folder if cleaner_app.output_folder else cleaner_app.input_folder.parent
+        self.path = cleaner_app.output_folder.parent if cleaner_app.output_folder else cleaner_app.input_folder.parent
         self.content = AddDialog(str(self.path), new=self.new, load=self.load, cancel=self.dismiss_popup)
 
         self._popup = Popup(title="Select Output Folder", content=self.content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def load(self, path, filename):
-        self.text = os.path.join(path, filename[0])
-        cleaner_app.output_folder = Path(self.text)
+        self.output_result.text = os.path.join(path, filename[0])
+        cleaner_app.output_folder = Path(self.output_result.text)
         Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
         self.dismiss_popup()
 
@@ -227,19 +227,27 @@ class OutputFolderSelector(BoxLayout):
         else:
             new_path = self.path.joinpath(value.text)
 
-        os.mkdir(new_path) if not new_path.exists() else None
-        cleaner_app.output_folder = new_path
-        self.text = str(new_path)
-        self._popup2.dismiss()
-        self._popup.dismiss()
+        try:
+            os.mkdir(new_path) if not new_path.exists() else None
+            cleaner_app.output_folder = new_path
+            self.output_result.text = str(new_path)
+            self._popup2.dismiss()
+        except PermissionError:
+            dismiss_dialog('New Folder Error',
+                           f"We are unable to create the new folder {new_path}. \n\n"
+                           f"This is usually due to a permission problem.    Make sure you actually select a folder\n"
+                           f"before you make a new 'child' folder\n")
+
+    @staticmethod
+    def get_initial_value():
+        return str(cleaner_app.output_folder)
 
 
 class InputFolderSelector(BoxLayout):
+    input_result = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(InputFolderSelector, self).__init__(**kwargs)
-        self.result = str(cleaner_app.input_folder)
-        self.cont = None
         self._popup = None
 
     def dismiss_popup(self):
@@ -254,11 +262,14 @@ class InputFolderSelector(BoxLayout):
 
     def load(self, path, filename):
         if len(filename) == 1:
-            self.result = os.path.join(path, filename[0])
-            cleaner_app.input_folder = Path(self.result)
-            cleaner_app.output_folder = cleaner_app.input_folder.parent
+            self.input_result.text = os.path.join(path, filename[0])
+            cleaner_app.input_folder = Path(self.input_result.text)
             Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
             self.dismiss_popup()
+
+    @staticmethod
+    def get_initial_value():
+        return str(cleaner_app.input_folder)
 
 
 class ActionBox(BoxLayout):
@@ -283,33 +294,43 @@ class Progress(Widget):
     max_results_size = 5000
 
     def update_progress(self, _):
+        """
+        This will run at a present interval (ActionBox.start_processing) and update the progress bar and the text
+        output.  When the child process dies,  update the summary text with useful information.
+        :param _:  It is the time since the last clock interval.   Not used
+        :return:
+        """
 
         # Update progress bar
         self.progress_bar.value = mp_processed_value.value
         if cleaner_app.recreate:
             mp_output_count.value = mp_processed_value.value
 
-        # Update results text
+        # Update results text,  we need to truncate since the text box widget can not handle large amounts of data
+        # todo: this truncation works but make for jumpy text,  maybe we can do better.
         new_text = self.progress_text.text
         while not mp_print_queue.empty():
             new_line = f'{mp_print_queue.get()}\n'
-            RESULTS.write(new_line)
+            RESULTS.write(new_line)  # This is the full output,  just in case.
             new_text = f'{new_text}{new_line}'
+
         if len(new_text) > self.max_results_size:
             new_text = new_text[len(new_text)-self.max_results_size:]
         self.progress_text.text = new_text
 
-        # We are complete
-        if not self.bg_process.is_alive():
-            self.exit_button.text = 'Exit'  # Abort -> Exit
+        if not self.bg_process.is_alive():  # We are complete
+            self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             self.parent.calculate_size(cleaner_app.output_folder, mp_output_count)
+            self.parent.get_output_details()
             self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
                                          f"Input File Count: {mp_input_count.value}\n" \
                                          f"Output Folder: {cleaner_app.output_folder}\n" \
-                                         f"Output File Count: {mp_output_count.value}"
+                                         f"Output File Count: {mp_output_count.value}" \
+                                         f"{self.parent.get_output_details()}"
+
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
             RESULTS.close()
-            return False
+            return False  # Stops this periodic task
 
     def start_application(self):
         # Take up to 30 seconds to see if values are in the background  todo: improve this approach
@@ -318,7 +339,9 @@ class Progress(Widget):
             sleep(1)
             count += 1
             if count == 30:
-                continue
+                logger.error(f'Input count {mp_input_count.value} Output count {mp_output_count.value} - Error')
+                break
+
         self.progress_bar.max = mp_input_count.value
         self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
                                      f"Input File Count: {mp_input_count.value}\n" \
@@ -374,10 +397,12 @@ class Progress(Widget):
 
 
 class MainScreen(BoxLayout):
+    input_selector = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super(MainScreen, self).__init__(**kwargs)
 
+        '''
         self.recreate_selector = CheckBoxItem('Recreate - recreate output folder',
                                               cleaner_app.recreate,
                                               self.check_recreate)
@@ -395,18 +420,20 @@ class MainScreen(BoxLayout):
                                                    cleaner_app.keep_original_files,
                                                    self.check_keep_original)
 
-        self.inputs = InputFolderSelector()
-        self.outputs = OutputFolderSelector()
-        self.extras = IgnoreFoldersSelector()
-        self.skip_name = SkipFoldersSelector()
+        #self.inputs = InputFolderSelector()
+        #self.outputs = OutputFolderSelector()
 
-        self.add_widget(self.inputs)
-        self.add_widget(self.outputs)
+        #self.add_widget(self.inputs)
+        #self.add_widget(self.outputs)
         self.add_widget(self.recreate_selector)
         self.add_widget(self.keep_dups_selector)
         self.add_widget(self.keep_clips_selector)
         self.add_widget(self.keep_converted_selector)
         self.add_widget(self.keep_original_selector)
+        '''
+        self.extras = IgnoreFoldersSelector()
+        self.skip_name = SkipFoldersSelector()
+
         self.add_widget(self.extras)
         self.add_widget(self.skip_name)
         self.add_widget(ActionBox())
@@ -458,6 +485,9 @@ class MainScreen(BoxLayout):
     def check_recreate(self, touch):
         cleaner_app.set_recreate(touch)
         logger.debug(f'recreate is {touch}')
+    @staticmethod
+    def get_recreate():
+        return cleaner_app.recreate
 
     def check_keep_dups(self, touch):
         cleaner_app.set_keep_duplicates(touch)
@@ -493,17 +523,16 @@ class MainScreen(BoxLayout):
                 print(f'Ignoring: {base}')
         which.value = value
 
+    def set_input_folder(self):
+        return 'a value'
+
 
 class ImageCleanApp(App):
-
-    def on_stop(self):
-        # The Kivy event loop is about to stop, set a stop signal;
-        # otherwise the app window will close, but the Python process will
-        # keep running until all secondary threads exit.
-        self.root.stop.set()
+    external_app = cleaner_app
 
     def build(self):
         return MainScreen()
+
 
 
 if __name__ == '__main__':
