@@ -12,7 +12,7 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.floatlayout import FloatLayout
-from kivy.properties import ObjectProperty, StringProperty, BooleanProperty
+from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, NumericProperty
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
@@ -79,6 +79,9 @@ class DismissDialog(BoxLayout):
 
 
 class CheckBoxItem(BoxLayout):
+    '''
+    Provide a get and set function for each checkbox item
+    '''
 
     def selected(self, checkbox):
         if hasattr(self, 'callback') and self.callback:
@@ -89,187 +92,22 @@ class CheckBoxItem(BoxLayout):
         cleaner_app.set_recreate(touch)
         logger.debug(f'recreate is {touch}')
 
-    @staticmethod
-    def get_recreate():
-        return cleaner_app.recreate
-
-
-class AddDialog(FloatLayout):
-
-    def __init__(self, load_path=None, **kwargs):
-        super(AddDialog, self).__init__(**kwargs)
-        self.filechooser.path = load_path if load_path else '/'
-
-    def new(path, filename):
-        print(path, filename)
-
-    load = ObjectProperty(None)
-    cancel = ObjectProperty(None)
-    new = ObjectProperty(new)
-
 
 class LoadDialog(FloatLayout):
-
-    def __init__(self, load_path=None, rooted=False, **kwargs):
+    def __init__(self, load_path=None, rooted=False, visible=1, multiselect=False, **kwargs):
         super(LoadDialog, self).__init__(**kwargs)
         self.filechooser.path = load_path if load_path else '/'
         self.filechooser.rootpath = None if not rooted else load_path
-
-    def new(path, filename):
-        print(path, filename)
+        self.filechooser.multiselect = multiselect
+        self.newbutton.opacity = visible
 
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
-
-
-class IgnoreFoldersSelector(BoxLayout):
-
-    def __init__(self, **kwargs):
-        super(IgnoreFoldersSelector, self).__init__(**kwargs)
-        self._popup = None
-        self.text = ''
-
-    def dismiss_popup(self):
-        self._popup.dismiss()
-
-    def show_load(self):
-        content = LoadDialog(str(cleaner_app.input_folder), rooted=True, load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Select a Folder to ignore", content=content, size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        if len(filename) == 1:
-            file = os.path.join(path, filename[0])
-            if cleaner_app.add_ignore_folder(Path(file)):
-                self.text = f'{self.text}\n{file}'
-                Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-                self.dismiss_popup()
-
-    def clear(self):
-        self.text = ''
-        cleaner_app.ignore_folders = []
-        Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-
-
-class SkipFoldersSelector(BoxLayout):
-
-    def __init__(self, **kwargs):
-        super(SkipFoldersSelector, self).__init__(**kwargs)
-        self._popup = None
-        self.text = ''
-
-    def dismiss_popup(self):
-        self._popup.dismiss()
-
-    def show_load(self):
-        content = LoadDialog(str(cleaner_app.input_folder), rooted=True, load=self.load, cancel=self.dismiss_popup)
-        self.text = ''
-        for item in cleaner_app.bad_parents:
-            self.text = f'{self.text}\n{item}'
-        self._popup = Popup(title="Select folder base to skip definition", content=content, size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        if len(filename) == 1:
-            file = Path(os.path.join(path, filename[0])).name
-            if cleaner_app.add_bad_parents(file):
-                self.text = f'{self.text}\n{file}'
-        self.dismiss_popup()
-
-    def clear(self):
-        self.text = ''
-        cleaner_app.bad_parents = []
+    new = ObjectProperty(None)
 
 
 class EnterFolder(TextInput):
     pass
-
-
-class OutputFolderSelector(BoxLayout):
-    output_result = ObjectProperty(None)
-
-    def __init__(self, **kwargs):
-        super(OutputFolderSelector, self).__init__(**kwargs)
-        self._popup = None
-        self._popup2 = None
-        self.path = None
-        self.folder = ''
-        self.content = None
-
-    def dismiss_popup(self):
-        if self._popup:
-            self._popup.dismiss()
-
-    def show_load(self):
-        self.path = cleaner_app.output_folder.parent if cleaner_app.output_folder else cleaner_app.input_folder.parent
-        self.content = AddDialog(str(self.path), new=self.new, load=self.load, cancel=self.dismiss_popup)
-
-        self._popup = Popup(title="Select Output Folder", content=self.content, size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        self.output_result.text = os.path.join(path, filename[0])
-        cleaner_app.output_folder = Path(self.output_result.text)
-        Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
-        self.dismiss_popup()
-
-    def new(self, path, filename):
-        content = EnterFolder(multiline=False, text='', hint_text='<Enter> to select')
-        content.bind(on_text_validate=self.on_enter)
-        self._popup2 = Popup(title="Folder Name", content=content, size_hint=(0.7, 0.2))
-        self._popup2.open()
-
-    def on_enter(self, value):
-        if not value.text:
-            dismiss_dialog("You must enter a value for the new folder name,   select cancel if you changed your mind")
-        if len(self.content.filechooser.selection) == 1:
-            new_path = Path(self.content.filechooser.selection[0]).joinpath(value.text)
-        else:
-            new_path = self.path.joinpath(value.text)
-
-        try:
-            os.mkdir(new_path) if not new_path.exists() else None
-            cleaner_app.output_folder = new_path
-            self.output_result.text = str(new_path)
-            self._popup2.dismiss()
-        except PermissionError:
-            dismiss_dialog('New Folder Error',
-                           f"We are unable to create the new folder {new_path}. \n\n"
-                           f"This is usually due to a permission problem.    Make sure you actually select a folder\n"
-                           f"before you make a new 'child' folder\n")
-
-    @staticmethod
-    def get_initial_value():
-        return str(cleaner_app.output_folder)
-
-
-class InputFolderSelector(BoxLayout):
-    input_result = ObjectProperty(None)
-
-    def __init__(self, **kwargs):
-        super(InputFolderSelector, self).__init__(**kwargs)
-        self._popup = None
-
-    def dismiss_popup(self):
-        if self._popup:
-            self._popup.dismiss()
-
-    def show_load(self):
-        path_str = str(cleaner_app.input_folder) if cleaner_app.input_folder else str(Path.home())
-        content = LoadDialog(path_str, load=self.load, cancel=self.dismiss_popup)
-        self._popup = Popup(title="Select Folder", content=content, size_hint=(0.9, 0.9))
-        self._popup.open()
-
-    def load(self, path, filename):
-        if len(filename) == 1:
-            self.input_result.text = os.path.join(path, filename[0])
-            cleaner_app.input_folder = Path(self.input_result.text)
-            Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-            self.dismiss_popup()
-
-    @staticmethod
-    def get_initial_value():
-        return str(cleaner_app.input_folder)
 
 
 class ActionBox(BoxLayout):
@@ -321,12 +159,10 @@ class Progress(Widget):
         if not self.bg_process.is_alive():  # We are complete
             self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             self.parent.calculate_size(cleaner_app.output_folder, mp_output_count)
-            self.parent.get_output_details()
             self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
                                          f"Input File Count: {mp_input_count.value}\n" \
                                          f"Output Folder: {cleaner_app.output_folder}\n" \
-                                         f"Output File Count: {mp_output_count.value}" \
-                                         f"{self.parent.get_output_details()}"
+                                         f"Output File Count: {mp_output_count.value}"
 
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
             RESULTS.close()
@@ -396,60 +232,146 @@ class Progress(Widget):
         mp_processed_value.value = mp_processed_value.value + 1
 
 
-class MainScreen(BoxLayout):
+class FolderSelector(BoxLayout):
+    '''
+    Provide a get (for input_label_value) and optionally set/callback function for each checkbox item
+    '''
+
+    input_label_value = StringProperty('')
+    show_new_button = NumericProperty(1)
+    load_callback = ObjectProperty(None)
+    allow_multiselect = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        super(FolderSelector, self).__init__(**kwargs)
+        self.new_base = None
+        self._popup = None
+        self._popup2 = None
+        self.content = None
+        self.input_label_value = ''
+        self.load_base = '/'
+
+    def dismiss_popup(self):
+        if self._popup:
+            self._popup.dismiss()
+
+    def show_load(self):
+        content = LoadDialog(self.load_base,
+                             load=self.load, new=self.new, cancel=self.dismiss_popup,
+                             visible=self.show_new_button, multiselect=self.allow_multiselect)
+        self._popup = Popup(title="Select Folder", content=content, size_hint=(0.9, 0.9))
+        self._popup.open()
+
+    def load(self, path, filename):
+        if len(filename) >= 1:
+            if self.load_callback:
+                self.load_callback(path, filename)
+            else:
+                self.input_label_value = os.path.join(path, filename[0])
+            self.dismiss_popup()
+
+    def new(self, path, filename):
+        self.new_base = filename[0] if len(filename) == 1 else path
+        self.content = EnterFolder(multiline=False, text='', hint_text='<Enter> to select')
+        self.content.bind(on_text_validate=self.on_enter)
+        self._popup2 = Popup(title="Folder Name", content=self.content, size_hint=(0.7, 0.2))
+        self._popup2.open()
+
+    def on_enter(self, value):
+        if not value.text:
+            dismiss_dialog("You must enter a value for the new folder name,   select cancel if you changed your mind")
+        else:
+            new_path = Path(self.new_base).joinpath(value.text)
+
+        try:
+            os.mkdir(new_path) if not new_path.exists() else None
+            cleaner_app.output_folder = Path(new_path)
+            self.input_label_value = str(new_path)
+            self._popup2.dismiss()
+            self._popup.dismiss()
+        except PermissionError:
+            dismiss_dialog('New Folder Error',
+                           f"We are unable to create the new folder {new_path}. \n\n"
+                           f"This is usually due to a permission problem.    Make sure you actually select a folder\n"
+                           f"before you make a new 'child' folder\n")
+
+    # Non Generic Functions
+
+    def get_input(self):
+        '''
+        Get(ters) should return the label value for the UI and set self.load_base for future load functions
+        :return:
+        '''
+        value = str(cleaner_app.input_folder)
+        self.input_label_value = value
+        self.load_base = str(cleaner_app.input_folder.parent)
+        return value
+
+    def set_input(self, path, filename):
+        self.input_label_value = os.path.join(path, filename[0])
+        cleaner_app.input_folder = Path(self.input_label_value)
+        Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+
+    def get_output(self):
+        value = str(cleaner_app.output_folder)
+        self.input_label_value = value
+        self.load_base = str(cleaner_app.output_folder.parent)
+
+        return value
+
+    def set_output(self, path, filename):
+        self.input_result = os.path.join(path, filename[0])
+        cleaner_app.output_folder = Path(self.input_result)
+        Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+
+    def get_skip_name(self):
+        value = ''
+        for entry in cleaner_app.bad_parents:
+            value += f'{entry}\n'
+        self.input_label_value = value
+        self.load_base = str(cleaner_app.input_folder)
+
+        return value
+
+    def clear_skip_name(self):
+        cleaner_app.bad_parents = []
+        self.input_label_value = self.get_skip_name()
+
+    def set_skip_name(self, path, filename):
+        for path_value in filename:
+            if path_value != path:
+                cleaner_app.bad_parents.append(Path(path_value).name)
+        self.input_label_value = self.get_skip_name()
+
+    def clear_ignore_folder(self):
+        cleaner_app.ignore_folders = []
+        self.input_label_value = self.get_ignore_folder()
+
+    def get_ignore_folder(self):
+        value = ''
+        for entry in cleaner_app.ignore_folders:
+            value += f'{entry}\n'
+        self.input_label_value = value
+        self.load_base = str(cleaner_app.input_folder)
+        return value
+
+    def set_ignore_folder(self, path, filename):
+        for path_value in filename:
+            if path_value != path:
+                cleaner_app.ignore_folders.append(Path(path_value))
+        self.input_label_value = self.get_ignore_folder()
+
+
+class Main(BoxLayout):
     input_selector = ObjectProperty(None)
 
     def __init__(self, **kwargs):
-        super(MainScreen, self).__init__(**kwargs)
-
-        '''
-        self.recreate_selector = CheckBoxItem('Recreate - recreate output folder',
-                                              cleaner_app.recreate,
-                                              self.check_recreate)
-        self.keep_dups_selector = CheckBoxItem('Keep Duplicates - Move Duplicates to a separate folder',
-                                               cleaner_app.keep_duplicates,
-                                               self.check_keep_dups)
-        self.keep_clips_selector = CheckBoxItem('Keep Movie Clips - When a movie clip image (iphone) is found,  '
-                                                'preserve the it in a separate folder',
-                                                cleaner_app.keep_movie_clips, self.check_keep_clips)
-        self.keep_converted_selector = CheckBoxItem('Keep Converted - Converted files are preserved',
-                                                    cleaner_app.keep_converted_files,
-                                                    self.check_keep_converted)
-        self.keep_original_selector = CheckBoxItem('Keep Original - when files are moved (to a differant output path) '
-                                                   'keep the originals',
-                                                   cleaner_app.keep_original_files,
-                                                   self.check_keep_original)
-
-        #self.inputs = InputFolderSelector()
-        #self.outputs = OutputFolderSelector()
-
-        #self.add_widget(self.inputs)
-        #self.add_widget(self.outputs)
-        self.add_widget(self.recreate_selector)
-        self.add_widget(self.keep_dups_selector)
-        self.add_widget(self.keep_clips_selector)
-        self.add_widget(self.keep_converted_selector)
-        self.add_widget(self.keep_original_selector)
-        '''
-        self.extras = IgnoreFoldersSelector()
-        self.skip_name = SkipFoldersSelector()
-
-        self.add_widget(self.extras)
-        self.add_widget(self.skip_name)
-        self.add_widget(ActionBox())
+        super(Main, self).__init__(**kwargs)
 
         self.progress = Progress()
 
         cleaner_app.print = types.MethodType(self.progress.override_print, cleaner_app)
         cleaner_app.increment_progress = types.MethodType(self.progress.override_progress, cleaner_app)
-
-        self.skip_name.text = ''
-        for item in cleaner_app.bad_parents:
-            self.skip_name.text = f'{self.skip_name.text}\n{item}'
-
-        self.extras.text = ''
-        for item in cleaner_app.ignore_folders:
-            self.extras.text = f'{self.extras.text}\n{item}'
 
         Process(target=self.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
         Process(target=self.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
@@ -485,6 +407,7 @@ class MainScreen(BoxLayout):
     def check_recreate(self, touch):
         cleaner_app.set_recreate(touch)
         logger.debug(f'recreate is {touch}')
+
     @staticmethod
     def get_recreate():
         return cleaner_app.recreate
@@ -531,8 +454,7 @@ class ImageCleanApp(App):
     external_app = cleaner_app
 
     def build(self):
-        return MainScreen()
-
+        return Main()
 
 
 if __name__ == '__main__':

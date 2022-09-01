@@ -48,7 +48,7 @@ class CheckBoxItem(BoxLayout):
         print(f'Set sam {value}')
 
 
-class GenericFolderSelector(BoxLayout):
+class FolderSelector(BoxLayout):
     '''
     Provide a get (for input_label_value) and optionally set/callback function for each checkbox item
     '''
@@ -59,7 +59,8 @@ class GenericFolderSelector(BoxLayout):
     allow_multiselect = BooleanProperty(False)
 
     def __init__(self, **kwargs):
-        super(GenericFolderSelector, self).__init__(**kwargs)
+        super(FolderSelector, self).__init__(**kwargs)
+        self.new_base = None
         self._popup = None
         self._popup2 = None
         self.content = None
@@ -85,6 +86,7 @@ class GenericFolderSelector(BoxLayout):
             self.dismiss_popup()
 
     def new(self, path, filename):
+        self.new_base = filename[0] if len(filename) == 1 else path
         self.content = EnterFolder(multiline=False, text='', hint_text='<Enter> to select')
         self.content.bind(on_text_validate=self.on_enter)
         self._popup2 = Popup(title="Folder Name", content=self.content, size_hint=(0.7, 0.2))
@@ -93,10 +95,8 @@ class GenericFolderSelector(BoxLayout):
     def on_enter(self, value):
         if not value.text:
             dismiss_dialog("You must enter a value for the new folder name,   select cancel if you changed your mind")
-        if len(self.content.filechooser.selection) == 1:
-            new_path = Path(self.content.filechooser.selection[0]).joinpath(value.text)
         else:
-            new_path = self.path.joinpath(value.text)
+            new_path = Path(self.new_base).joinpath(value.text)
 
         try:
             os.mkdir(new_path) if not new_path.exists() else None
@@ -120,15 +120,17 @@ class GenericFolderSelector(BoxLayout):
         return value
 
     def get_ignore(self):
+        values = 'abcdefghijklmnopqr'
         value = ''
-        for entry in data.ignore:
+        for entry in values:
             value += f'{entry}\n'
         self.input_label_value = value
         return value
 
     def set_ignore(self, path, filename):
         for path_value in filename:
-            data.ignore.append(Path(path_value).name)
+            if path_value != path:
+                data.ignore.append(Path(path_value).name)
         value = ''
         for entry in data.ignore:
             value += f'{entry}\n'
@@ -137,6 +139,7 @@ class GenericFolderSelector(BoxLayout):
 
 class EnterFolder(TextInput):
     pass
+
 
 class LoadDialog(FloatLayout):
     def __init__(self, load_path=None, rooted=False, visible=1, multiselect=False, **kwargs):

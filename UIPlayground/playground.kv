@@ -24,7 +24,7 @@
             text: root.text
 
 
-<GenericFolderSelector>:
+<FolderSelector>:
     input_button_text: ''
     get_label_value: ''
     load_callback: None
@@ -40,26 +40,40 @@
             size_hint: 0.25, 1.0
             pos_hint: {'center': 1}
             on_press: root.show_load()
-        Label:
-            text: root.input_label_value
-            size_hint: 0.7, 1.0
-            valign: 'center'
-            texture_size: self.size
-            text_size: self.size
-            padding_x: 10
+        ScrollView:
+            do_scroll_x: False
+            do_scroll_y: True
+
+            Label:
+                text: root.input_label_value
+                height: self.texture_size[1]
+                text_size: self.width, None
+
+                size_hint_y: None
+                valign: 'center'
+                #texture_size: self.size
+                #text_size: self.size
+                padding: 10, 15
 
 <Main>:
     orientation: 'vertical'
-    GenericFolderSelector:
+    FolderSelector:
         input_button_text: 'Select Input Folder'
         get_label_value: self.get_input()
         show_new_button: 0
-    GenericFolderSelector:
+    FolderSelector:
         input_button_text: 'Change Output Folder'
         get_label_value: self.get_output()
-    GenericFolderSelector:
+    FolderSelector:
         size_hint: 1.0, 0.3
         input_button_text: 'Input folders to ignore'
+        get_label_value: self.get_ignore()
+        show_new_button: 0
+        load_callback: self.set_ignore
+        allow_multiselect: True
+    FolderSelector:
+        size_hint: 1.0, 0.3
+        input_button_text: 'Folder names to ignore'
         get_label_value: self.get_ignore()
         show_new_button: 0
         load_callback: self.set_ignore

@@ -5,145 +5,22 @@
 # yellow = background_color: utils.get_color_from_hex('#E9F20D')
 # red = background_color: utils.get_color_from_hex('#FF0000')
 # green = background_color: utils.get_color_from_hex('#00FF00')
-<GenericFolderSelector>:
-    input_result: input_result
-    text = ''
-    size_hint: 1.0, 0.1
-    BoxLayout:
-        orientation: 'horizontal'
-        Button:
-            text: "Change Input Folder"
-            background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.25, 1.0
-            pos_hint: {'center': 1}
-            on_press: root.show_load()
-        Label:
-            id: input_result
-            text: root.get_initial_value()
-            size_hint: 0.7, 1.0
-            valign: 'center'
-            texture_size: self.size
-            text_size: self.size
-            padding_x: 10
-
-<InputFolderSelector>:
-    input_result: input_result
-    size_hint: 1.0, 0.1
-    BoxLayout:
-        orientation: 'horizontal'
-        Button:
-            text: "Change Input Folder"
-            background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.25, 1.0
-            pos_hint: {'center': 1}
-            on_press: root.show_load()
-        Label:
-            id: input_result
-            text: root.get_initial_value()
-            size_hint: 0.7, 1.0
-            valign: 'center'
-            texture_size: self.size
-            text_size: self.size
-            padding_x: 10
-
-<OutputFolderSelector>:
-    output_result: output_result
-    size_hint: 1.0, 0.1
-    BoxLayout:
-        orientation: 'horizontal'
-        Button:
-            text: "Change Output Folder"
-            background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.25, 1.0
-            pos_hint: {'center': 1}
-            on_press: root.show_load()
-        Label:
-            id: output_result
-            text: root.get_initial_value()
-            size_hint: 0.7, 1.0
-            pos_hint: {'right': 1, 'center': 1}
-            texture_size: self.size
-            text_size: self.size
-            valign: 'center'
-            padding_x: 10
-
-<IgnoreFoldersSelector>:
-    id: _container
-    text: ''
-    selected: False
-    callback: None
-    size_hint: 1.0, None
-    BoxLayout:
-        orientation: 'horizontal'
-        Button:
-            text: "Add a folder\nto ignore"
-            background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.4, 1.0
-            pos_hint: {'center': 1}
-            # active: _container.selected
-            on_press: root.show_load()
-        ScrollView:
-            do_scroll_x: True
-            do_scroll_y: True
-            Label:
-                text: _container.text
-                size_hint: 0.5, 1.0
-                height: self.texture_size[1]
-                text_size: self.width, None
-                padding: 10, 10
-        Button:
-            text: "Clear"
-            size_hint: 0.1, 1.0
-            background_color: utils.get_color_from_hex('#FF0000')
-            on_press: root.clear()
-
-<SkipFoldersSelector>:
-    id: _container
-    text: ''
-    selected: False
-    callback: None
-    size_hint: 1.0, None
-    BoxLayout:
-        orientation: 'horizontal'
-        Button:
-            text: "Add a folder\nNAME to ignore"
-            background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.4, 1.0
-
-            pos_hint: {'center': 1}
-            # active: _container.selected
-            on_press: root.show_load()
-        ScrollView:
-            do_scroll_x: True
-            do_scroll_y: True
-            Label:
-                size_hint: 0.5, 1.0
-                text: _container.text
-                height: self.texture_size[1]
-                text_size: self.width, None
-                padding: 10, 10
-        Button:
-            text: "Clear"
-            size_hint: 0.1, 1.0
-            background_color: utils.get_color_from_hex('#FF0000')
-            on_press: root.clear()
-
 
 <CheckBoxItem>:
     text: ''
     callback: None
     check_value: False
-    size_hint: 1.0, 0.1
+    size_hint: 1.0, None
+    height: 50
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
-            id: _checkbox
             size_hint: 0.15, 1.0
             pos_hint: {'right': 1, 'center': 0.5}
             active: root.check_value
             on_active: root.selected(self)
         Label:
-            size_hint: 0.9, 1.0
+            size_hint: 0.85, 1.0
             pos_hint: {'center': 1}
             texture_size: self.size
             text_size: self.size
@@ -151,32 +28,92 @@
             valign: 'center'
             text: root.text
 
-<MainScreen>:  # This is a BoxLayout
-    orientation: 'vertical'
+<FolderSelector>:
+    show_clear: 0
+    input_button_text: ''
+    get_label_value: ''
+    load_callback: None
+    clear_callback: None
+    default_scrolling: False
+
+    text: ''
+    size_hint: 1.0, None
+    height: 50
+
     BoxLayout:
         orientation: 'horizontal'
-        size_hint_x: 1
-        size_hint_y: .15
-        Button
-            text: 'Setup Page -> Press "Go" to process Input Folder'
         Button:
-            text: 'Help'
-            size_hint_x: .2
-            background_color: utils.get_color_from_hex('#0E2BF1')
-            on_release: root.help()
+            text: root.input_button_text
+            background_color: utils.get_color_from_hex('#E9F20D')
+            size_hint: 0.3, 1.0
+            pos_hint: {'center': 1}
+            on_press: root.show_load()
+        ScrollView:
+            do_scroll_x: False
+            do_scroll_y: root.default_scrolling
+            Label:
+                text: root.input_label_value
+                height: self.texture_size[1]
+                text_size: self.width, None
+
+                size_hint_y: None
+                valign: 'center'
+                #texture_size: self.size
+                #text_size: self.size
+                padding: 10, 15
         Button:
-            text: 'About'
-            size_hint_x: .2
-            background_color: utils.get_color_from_hex('#00FF00')
-            on_release: root.about()
-    InputFolderSelector:
-    OutputFolderSelector:
-    IgnoreFoldersSelector:
-    SkipFoldersSelector:
+            opacity: root.show_clear
+            text: "Clear"
+            size_hint: 0.1, 1.0
+            background_color: utils.get_color_from_hex('#99ccff')
+            on_press: root.clear_callback()
+
+<ActionBox>:
+    size_hint: 1.0, .2
+    #padding: 10, 10
+    orientation: 'horizontal'
+    Button:
+        text: "Go"
+        background_color: utils.get_color_from_hex('#00FF00')
+        on_press: root.start_processing()
+    Button:
+        text: "Cancel"
+        background_color: utils.get_color_from_hex('#FF0000')
+        on_release: root.parent.exit(1)
+
+<Main>:
+    orientation: 'vertical'
+    FolderSelector:
+        input_button_text: 'Select Input Folder'
+        get_label_value: self.get_input()
+        load_callback: self.set_input
+    FolderSelector:
+        input_button_text: 'Change Output Folder'
+        get_label_value: self.get_output()
+        show_new_button: 1
     CheckBoxItem:
-        text: "Recreate - recreate output folder - ALL PREVIOUS FILES will be backed up!"
+        text: "Recreate - recreate output folder - Forces a backup of any previous file!"
         check_value: False
         callback: self.set_recreate
+    FolderSelector:
+        height: 200
+        default_scrolling: True
+        show_clear: 1
+        clear_callback: self.clear_skip_name
+        input_button_text: 'Folder names to ignore'
+        get_label_value: self.get_skip_name()
+        load_callback: self.set_skip_name
+        allow_multiselect: True
+    FolderSelector:
+        height: 200
+        default_scrolling: True
+        show_clear: 1
+        clear_callback: self.clear_ignore_folder
+        input_button_text: 'Input Folders to ignore'
+        get_label_value: self.get_ignore_folder()
+        load_callback: self.set_ignore_folder
+        allow_multiselect: True
+    ActionBox:
 
 <Progress>:
     progress_bar: progress_bar
@@ -213,18 +150,6 @@
                 root.abort()
 
 
-<ActionBox>:
-    size_hint: 1.0, .2
-    padding: 10, 10
-    orientation: 'horizontal'
-    Button:
-        text: "Go"
-        background_color: utils.get_color_from_hex('#00FF00')
-        on_press: root.start_processing()
-    Button:
-        text: "Cancel"
-        background_color: utils.get_color_from_hex('#FF0000')
-        on_release: root.parent.exit(1)
 
 
 <DismissDialog>:
@@ -242,11 +167,9 @@
             on_release:
                 root.dismiss()
 
-
-
 <LoadDialog>:
-    id: _load_dialog
     filechooser: file_chooser
+    newbutton: new_button
     BoxLayout:
         size: root.size
         pos: root.pos
@@ -254,38 +177,18 @@
         FileChooserIconView:
             id: file_chooser
             dirselect: True
-            filters: ['']
-
+            filters: ['']  # Only show folders
         BoxLayout:
+            # force 30px for the action buttons
             size_hint_y: None
             height: 30
             Button:
                 text: "Select"
                 on_release: root.load(file_chooser.path, file_chooser.selection)
             Button:
-                text: "Cancel"
-                on_release: root.cancel()
-
-<AddDialog>:
-    id: _load_dialog
-    filechooser: filechooser
-    BoxLayout:
-        size: root.size
-        pos: root.pos
-        orientation: "vertical"
-        FileChooserIconView:
-            id: filechooser
-            dirselect: True
-            filters: ['']
-        BoxLayout:
-            size_hint_y: None
-            height: 30
-            Button:
-                text: "Select"
-                on_release: root.load(filechooser.path, filechooser.selection)
-            Button:
-                text: "New Folder"
-                on_release: root.new(filechooser.path, filechooser.selection)
+                id: new_button
+                text: "New"
+                on_release: root.new(file_chooser.path, file_chooser.selection)
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
