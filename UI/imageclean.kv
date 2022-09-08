@@ -15,12 +15,13 @@
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
-            size_hint: 0.15, 1.0
+            size_hint_x: 0.5
             pos_hint: {'right': 1, 'center': 0.5}
             active: root.check_value
             on_active: root.selected(self)
         Label:
-            size_hint: 0.85, 1.0
+            padding: 20, 15
+            size_hint_x: 0.85
             pos_hint: {'center': 1}
             texture_size: self.size
             text_size: self.size
@@ -36,17 +37,16 @@
     clear_callback: None
     default_scrolling: False
 
+    size_hint_y: .3
     text: ''
-    size_hint: 1.0, None
-    height: 50
-
     BoxLayout:
         orientation: 'horizontal'
         Button:
             text: root.input_button_text
             background_color: utils.get_color_from_hex('#E9F20D')
-            size_hint: 0.3, 1.0
-            pos_hint: {'center': 1}
+            width: 100
+            size_hint: 0.75, 1.0
+            #pos_hint: {'center': 1}
             on_press: root.show_load()
         ScrollView:
             do_scroll_x: False
@@ -58,19 +58,16 @@
 
                 size_hint_y: None
                 valign: 'center'
-                #texture_size: self.size
-                #text_size: self.size
                 padding: 10, 15
         Button:
             opacity: root.show_clear
             text: "Clear"
-            size_hint: 0.1, 1.0
-            background_color: utils.get_color_from_hex('#99ccff')
+            size_hint: 0.2, 1.0
+            background_color: utils.get_color_from_hex('#99CCFF')
             on_press: root.clear_callback()
 
 <ActionBox>:
-    size_hint: 1.0, .2
-    #padding: 10, 10
+    #size_hint: 1.0, .2
     orientation: 'horizontal'
     Button:
         text: "Go"
@@ -83,6 +80,20 @@
 
 <Main>:
     orientation: 'vertical'
+    BoxLayout:
+        orientation: 'horizontal'
+        size_hint_y: .2
+        Button:
+            text: 'Help'
+            background_color: utils.get_color_from_hex('#00FF00')
+            size_hint: 0.3, 1.0
+        Button:
+            text: ''
+            opacity: 0
+        Button:
+            background_color: utils.get_color_from_hex('#00FF00')
+            text: 'About'
+            size_hint_x: 0.3
     FolderSelector:
         input_button_text: 'Select Input Folder'
         get_label_value: self.get_input()
@@ -90,13 +101,14 @@
     FolderSelector:
         input_button_text: 'Change Output Folder'
         get_label_value: self.get_output()
+        load_callback: self.set_output
         show_new_button: 1
     CheckBoxItem:
         text: "Recreate - recreate output folder - Forces a backup of any previous file!"
         check_value: False
         callback: self.set_recreate
     FolderSelector:
-        height: 200
+        size_hint_y: 1
         default_scrolling: True
         show_clear: 1
         clear_callback: self.clear_skip_name
@@ -105,7 +117,7 @@
         load_callback: self.set_skip_name
         allow_multiselect: True
     FolderSelector:
-        height: 200
+        size_hint_y: 1
         default_scrolling: True
         show_clear: 1
         clear_callback: self.clear_ignore_folder
@@ -114,6 +126,7 @@
         load_callback: self.set_ignore_folder
         allow_multiselect: True
     ActionBox:
+        size_hint_y: 0.25
 
 <Progress>:
     progress_bar: progress_bar
@@ -150,18 +163,16 @@
                 root.abort()
 
 
-
-
 <DismissDialog>:
     # Reusable dialog to display warnings/errors/info
     BoxLayout:
 
-        pos_hint: {'right': 1, 'center': 0.5}
+        #pos_hint: {'right': 1, 'center': 0.5}
         orientation: 'vertical'
         Label:
             text: root.error_text
         Button:
-            size_hint: 1, 0.2
+            #size_hint: 1, 0.2
             text: "Dismiss"
             background_color: utils.get_color_from_hex('#0E2BF1')
             on_release:
@@ -181,7 +192,7 @@
         BoxLayout:
             # force 30px for the action buttons
             size_hint_y: None
-            height: 30
+            #height: 30
             Button:
                 text: "Select"
                 on_release: root.load(file_chooser.path, file_chooser.selection)

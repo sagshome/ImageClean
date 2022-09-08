@@ -27,8 +27,8 @@ if __name__ == '__main__':
     log_file = f'{temp_file_dir.name}{os.path.sep}log'
     print(f'{test_name}:Logs in {temp_file_dir}')
 
-    executable = f'{start_dir.parent}/image_clean.py -r -V -P -o{temp_output.name} {temp_input.name}'
-    again = f'{start_dir.parent}/image_clean.py -V {temp_input.name}'
+    executable = f'{start_dir.parent}/Backend/Cleaner.py -r -V -P -o{temp_output.name} {temp_input.name}'
+    again = f'{start_dir.parent}/Cleaner.py -V {temp_input.name}'
 
     os.chdir(temp_input.name)
     tar.extractall()

@@ -25,9 +25,11 @@ if __name__ == '__main__':
     temp_file_dir = tempfile.TemporaryDirectory()
     temp_file = f'{temp_file_dir.name}{os.path.sep}find'
     log_file = f'{temp_file_dir.name}{os.path.sep}log'
+    diff_file = f'{temp_file_dir.name}{os.path.sep}diff'
+
     print(f'{test_name}:Logs in {temp_file_dir}')
 
-    executable = f'{start_dir.parent}/image_clean.py -r -V -P -o{temp_output.name} {temp_input.name}'
+    executable = f'{start_dir.parent}/Backend/image_clean.py -r -V -P -o{temp_output.name} {temp_input.name}'
     again = f'{start_dir.parent}/image_clean.py -V -P -o{temp_output.name} {temp_input.name}'
 
     os.chdir(temp_input.name)

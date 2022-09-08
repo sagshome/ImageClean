@@ -17,14 +17,14 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
 from Backend.Cleaner import ImageClean, FileCleaner, FolderCleaner
-
+application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
 app_path = Path(sys.argv[0])
-run_path = Path(Path.home().joinpath(f'.{app_path.stem}'))
+run_path = Path(Path.home().joinpath(f'.{application_name}'))
 os.mkdir(run_path) if not run_path.exists() else None
 
 log_file = run_path.joinpath('logfile')
-results_file = run_path.joinpath(f'{app_path.stem}.results')
+results_file = run_path.joinpath(f'{application_name}.results')
 
 if results_file.exists():
     FileCleaner.rollover_name(results_file)
@@ -33,8 +33,8 @@ RESULTS = open(results_file, "w+")
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_name(log_file)
 
-debugging = os.getenv(f'{app_path.stem.upper()}_DEBUG')
-logger = logging.getLogger(app_path.stem)
+debugging = os.getenv(f'{application_name.upper()}_DEBUG')
+logger = logging.getLogger(application_name)
 
 fh = logging.FileHandler(filename=str(log_file))
 fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
@@ -42,7 +42,7 @@ fh.setFormatter(fh_formatter)
 logger.addHandler(fh)
 
 # The App will run in the background,  value and queue are used for some basic info passing
-cleaner_app = ImageClean(app_path.stem, restore=True)  # save options over each run
+cleaner_app = ImageClean(application_name, restore=True)  # save options over each run
 mp_processed_value = Value("i", 0)
 mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
@@ -320,9 +320,9 @@ class FolderSelector(BoxLayout):
         return value
 
     def set_output(self, path, filename):
-        self.input_result = os.path.join(path, filename[0])
-        cleaner_app.output_folder = Path(self.input_result)
-        Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+        self.input_label_value = os.path.join(path, filename[0])
+        cleaner_app.output_folder = Path(self.input_label_value)
+        Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
 
     def get_skip_name(self):
         value = ''

@@ -13,7 +13,7 @@ from PIL import Image, UnidentifiedImageError
 from shutil import copyfile
 from typing import List, Dict, Optional, TypeVar, Union
 
-logger = logging.getLogger('image_clean')
+logger = logging.getLogger('Cleaner')
 
 NEW_FILE: int = 0
 EXACT_FILE: int = 1
@@ -34,7 +34,6 @@ FolderCT = TypeVar("FolderCT", bound="FolderCleaner")
 
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
-    logger.debug(f'Go for it:{file}')
     if file.is_dir():
         return FolderCleaner(file, parent=folder)
     if file.suffix.upper() in IMAGE_FILES:
@@ -113,7 +112,7 @@ class Cleaner:
 
     @cached_property
     def just_name(self) -> str:
-        return self.path.name[:len(self.path.name) - len(self.path.suffix)]
+        return self.path.stem
 
     @property
     def just_path(self) -> str:
@@ -293,8 +292,12 @@ class Cleaner:
         else:
             copyfile(str(self.path), new)
         if remove:
-            os.unlink(self.path)
+            try:
+                os.unlink(self.path)
+            except OSError as e:
+                logger.debug(f'{self.path} could not be removed ({e}')
         if register:
+            self.path = new
             self.register()
 
     def get_date_from_path_name(self) -> Optional[datetime]:
@@ -304,13 +307,14 @@ class Cleaner:
         """
         parser_values = [  # Used to loop over _get_date_from_path_name
             ['^([0-9]{8})-([0-9]{6})$', '%Y%m%d%H%M%S', 3],
+            ['^([0-9]{8})_([0-9]{6})$', '%Y%m%d%H%M%S', 3],  # todo: clom these two up together using [-_] or .
             ['^([0-9]{4}).([0-9]{2}).([0-9]{2}).*', '%Y%m%d', 3],
             ['^([0-9]{2}).([a-zA-Z]{3}).([0-9]{4}).*', '%d%b%Y', 3],
             ['^([0-9]{4}).([0-9]{2}).+', '%Y%m', 2]
         ]
 
         def _get_date_from_path_name(name: str, regexp: str,  date_format: str, array_max: int) -> Optional[datetime]:
-            re_parse = re.match(regexp, self.path.name)
+            re_parse = re.match(regexp, self.path.stem)
             if re_parse:
                 re_array = re_parse.groups()
                 date_string = "".join(re_array[0:array_max])
@@ -321,7 +325,7 @@ class Cleaner:
             return None
 
         for exp, fmt, index in parser_values:
-            value = _get_date_from_path_name(self.path.name, exp, fmt, index)
+            value = _get_date_from_path_name(self.path.stem, exp, fmt, index)
             if value:
                 return value
         return None
@@ -505,8 +509,8 @@ class ImageCleaner(Cleaner):
             self._date = self.get_date_from_image()
             if not self._date:  # Short circuit to find a date
                 self._date = self.get_date_from_path_name() or self.get_date_from_folder_names() or self.folder.date
-            if self._date:
-                self.update_image()
+                if self._date:
+                    self.update_image()
         return self._date
 
     # Ensure we have a date for the existing image
@@ -521,9 +525,9 @@ class ImageCleaner(Cleaner):
             try:
                 self._image = Image.open(self.path)
             except UnidentifiedImageError as e:
-                logger.debug(f'{self.path} - {e.strerror}')
+                logger.debug(f'open_image UnidentifiedImageError {self.path} - {e.strerror}')
             except OSError as e:
-                logger.debug(f'{self.path} - {e.strerror}')
+                logger.debug(f'open_image OSError {self.path} - {e.strerror}')
         return self._image
 
     def load_image_data(self):
@@ -567,6 +571,7 @@ class ImageCleaner(Cleaner):
         else:
             import pyheif
 
+        # todo:  What if input directory is R/O.   Also what right to I have to change this directory
         save_to = self.get_new_path(base=migrated_base) if migrated_base else None
         new_name = f'{self.just_path}.jpg'
         if os.path.exists(new_name):
@@ -614,8 +619,11 @@ class ImageCleaner(Cleaner):
                 exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
                 changed = True
             if changed:
-                exif_bytes = piexif.dump(exif_dict)
-                piexif.insert(exif_bytes, str(self.path))
+                try:
+                    exif_bytes = piexif.dump(exif_dict)
+                    piexif.insert(exif_bytes, str(self.path))
+                except ValueError as e:
+                    logger.error(f'Failed to update {self.path} Error {e}')
 
         except piexif.InvalidImageDataError:
             logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
@@ -867,9 +875,10 @@ class ImageClean:
         self.recreate = False
         self.keep_duplicates = False
         self.keep_movie_clips = False
-        self.process_all_files = True  # todo: re-evaluate this
+        self.process_all_files = False  # todo: re-evaluate this
         self.keep_converted_files = False
         self.keep_original_files = False
+        self.do_not_process = []
         self.ignore_folders = []
         self.bad_parents = []
         self.progress = 0
@@ -885,10 +894,11 @@ class ImageClean:
             self.process_args(kwargs)
 
         self.duplicate_path_base = f'{self.app_name}_Duplicates'
-        self.movie_path_base = f'{self.app_name}_Clips'
-        self.converted_path_base = f'{self.app_name}_Converted'
+        self.movie_path_base = f'{self.app_name}_ImageMovies'
+        self.converted_path_base = f'{self.app_name}_Migrated'
+        self.no_date_base = f'{self.app_name}_NoDate'
+        self.small_base = f'{self.app_name}_Small'
 
-        self.process_all_files = False
         self.in_place = False
         self.no_date_path = None
         self.small_path = None
@@ -969,7 +979,7 @@ class ImageClean:
             return True
         return False
 
-    def add_bad_parents(self, value: str):
+    def add_bad_parents(self, value: Path):
         if value not in self.bad_parents:
             self.bad_parents.append(value)
             return True
@@ -982,9 +992,9 @@ class ImageClean:
         self.set_keep_movie_clips(value)
 
     def prepare(self):
-
-        if not self.output_folder:
-            self.output_folder = self.input_folder
+        """
+        Some further processing once all the options have been set.
+        """
 
         if self.output_folder == self.input_folder:
             if self.recreate:
@@ -995,23 +1005,30 @@ class ImageClean:
         self.ignore_folders.append(self.output_folder.joinpath(self.movie_path_base))
         self.ignore_folders.append(self.output_folder.joinpath(self.duplicate_path_base))
         self.ignore_folders.append(self.output_folder.joinpath(self.converted_path_base))
-        self.ignore_folders.append(self.output_folder.joinpath(f'{self.app_name}_Small'))
+        self.ignore_folders.append(self.output_folder.joinpath(self.small_base))
 
-        self.no_date_path = self.output_folder.joinpath(f'{self.app_name}_NoDate')
-        self.small_path = self.output_folder.joinpath(f'{self.app_name}_Small')
+        self.bad_parents.append(self.no_date_base)
+        self.bad_parents.append(self.movie_path_base)
+        self.bad_parents.append(self.duplicate_path_base)
+        self.bad_parents.append(self.converted_path_base)
+        self.bad_parents.append(self.small_base)
+
+        self.no_date_path = self.output_folder.joinpath(self.no_date_base)
+        self.small_path = self.output_folder.joinpath(self.small_base)
+
         if self.keep_converted_files:
-            self.output_folder.joinpath(f'{self.app_name}_Migrated')
+            self.migrated_path = self.output_folder.joinpath(self.converted_path_base)
 
         if self.keep_duplicates:
-            self.duplicate_path = self.output_folder.joinpath(f'{self.app_name}_Duplicates')
+            self.duplicate_path = self.output_folder.joinpath(self.duplicate_path_base)
 
         if self.keep_movie_clips:
-            self.output_folder.joinpath(f'{self.app_name}_ImageMovies')
+            self.image_movies_path = self.output_folder.joinpath(self.movie_path_base)
 
         # Backup any previous attempts
 
         if not self.recreate or self.in_place:  # Same root or importing from a new location
-            self.register_files(self.output_folder, self.output_folder)
+            self.register_files(self.output_folder)
 
         if self.recreate:
             if self.output_folder.exists():
@@ -1024,23 +1041,31 @@ class ImageClean:
         os.mkdir(self.image_movies_path) if self.image_movies_path and not self.image_movies_path.exists() else None
         os.mkdir(self.small_path) if self.small_path and not self.small_path.exists() else None
 
-    def register_files(self, input_dir: Path, base: Path):
-        for entry in input_dir.iterdir():
+    def register_files(self, output_dir: Path):
+        """
+        Take an inventory of all the existing files.    This allows us to easily detected duplicate files.
+        :param output_dir:  where we will be moving file to
+        :return:
+        """
+        for entry in output_dir.iterdir():
             if entry.is_dir():
-                if entry not in self.ignore_folders:
-                    self.register_files(entry, base)
+                self.register_files(entry)
             else:
-                if not entry.parent == base:  # If this was previously processed it would not be here
-                    file_cleaner(entry, FolderCleaner(input_dir)).register()
+                #if not entry.parent == output_dir:  # The base of the output directory should not contain files,  if
+                                                    # it does they were not added by us so they need to be pr
+                file_cleaner(entry, FolderCleaner(output_dir)).register()
 
     @staticmethod
     def duplicate_get(entry: Union[ImageCleaner, FileCleaner]) -> Optional[Union[ImageCleaner, FileCleaner]]:
-
+        matched = None
         for value in entry.get_all_registered():
-            if entry == value:  # The image data is exactly the same
-                return value
+            if entry == value:
+                if entry.path == value.path:  # The image data is exactly the same
+                    return value
+                else:
+                    matched = value
         logger.error(f'Expecting to find a duplicate for {entry.path}')
-        return None
+        return matched
 
     @staticmethod
     def duplicates_test(entry: Union[ImageCleaner, FileCleaner]) -> int:
@@ -1134,7 +1159,7 @@ class ImageClean:
         self.increment_progress()
 
         if not entry.is_valid:
-            logger.debug(f'Invalid file {entry.path}')
+            self.print(f'.... File {entry.path} is invalid.')
             return
 
         new_entry = entry.convert(self.migrated_path, remove=self.keep_original_files and not self.in_place)
@@ -1144,12 +1169,12 @@ class ImageClean:
         if not self.process_all_files:
             if entry.path.suffix not in entry.all_images:
                 if entry.path.suffix not in entry.all_movies:
-                    logger.debug(f'Ignoring not image file {entry.path}')
+                    self.print(f'.... Ignoring non image file {entry.path}')
                     return
 
         # Now lets go about building our output folder
         if entry.date:
-            new_path = entry.get_new_path(self.output_folder)
+            new_path = entry.get_new_path(self.output_folder, invalid_parents=self.bad_parents)
         else:  # make sure we do not over process things already determined to not be 'no date' files.
             if str(entry.path.parent).startswith(str(self.no_date_path)):
                 new_path = entry.path.parent
@@ -1159,18 +1184,23 @@ class ImageClean:
         dup_result = self.duplicates_test(entry)
         logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
         if dup_result == NEW_FILE:  # We have not seen this file before
-            entry.relocate_file(new_path, register=True, remove=not self.keep_original_files or self.in_place, rollover=True)
+            entry.relocate_file(new_path, register=True, remove=not self.keep_original_files or self.in_place,
+                                rollover=True)
         elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
-            entry.relocate_file(entry.get_new_path(self.small_path), remove=not self.keep_original_files, rollover=False)
+            entry.relocate_file(entry.get_new_path(self.small_path), remove=not self.keep_original_files,
+                                rollover=False)
         elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
             existing = self.duplicate_get(entry)
-            if dup_result in (LESSER_FILE, EXACT_FILE):
-                entry.relocate_file(entry.get_new_path(self.duplicate_path), remove=not self.keep_original_files or self.in_place,
-                                    create_dir=False, rollover=False)
-            elif dup_result == GREATER_FILE:
-                existing.relocate_file(existing.get_new_path(self.duplicate_path), remove=not self.keep_original_files,
-                                       create_dir=False, rollover=False)
-                entry.relocate_file(new_path, register=True, remove=self.in_place, rollover=False)
+            if not entry.path == existing.path:  # We are the same file,  do nothing
+                if dup_result in (LESSER_FILE, EXACT_FILE):
+                    entry.relocate_file(entry.get_new_path(self.duplicate_path),
+                                        remove=not self.keep_original_files or self.in_place,
+                                        create_dir=False, rollover=False)
+                elif dup_result == GREATER_FILE:
+                    existing.relocate_file(existing.get_new_path(self.duplicate_path),
+                                           remove=not self.keep_original_files,
+                                           create_dir=False, rollover=False)
+                    entry.relocate_file(new_path, register=True, remove=self.in_place, rollover=False)
         else:
             assert False, f'Invalid test result {dup_result}'
 
@@ -1184,3 +1214,5 @@ class ImageClean:
                 self.process_folder(this_folder)
             elif entry.is_file():
                 self.process_file(file_cleaner(entry, folder))
+            else:
+                self.print(f'. Folder: {entry} ignored ')
