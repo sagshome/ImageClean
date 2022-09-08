@@ -37,6 +37,10 @@ class ExternalSetup(unittest.TestCase):
 
         super(ExternalSetup, self).setUp()
 
+    def force_temp_input_to_output(self):
+        self.temp_input.cleanup()
+        self.temp_input = self.temp_output
+
     def tearDown(self):
         self.temp_input.cleanup()
         self.temp_output.cleanup()
@@ -81,7 +85,7 @@ class ExternalSetup(unittest.TestCase):
             self._read_dir(old, self.results_file)
             for each in new - old:
                 count += 1
-                self.results_out.append(f'Unexpected new input file: {each}')
+                self.results_out.append(f'Unexpected new output file: {each}')
             for each in old - new:
                 if (each.startswith('Cleaner_Duplicates') and duplicates) or \
                         (each.startswith('Cleaner_ImageMovies') and movies) or \
@@ -159,13 +163,15 @@ class TestExternal(ExternalSetup):
         self.tarfile_name = my_location.joinpath('data').joinpath('ptest.tar.gz')
         self.results_input = my_location.joinpath('data').joinpath('ptest.input')
         self.results_file = my_location.joinpath('data').joinpath('file_test1.result')
-        self.input_file = my_location.joinpath('data').joinpath('empty_input.result')  # This is what remains
+        self.input_file = my_location.joinpath('data').joinpath('file_test1.result')  # This is what remains
 
         self.extract()
-        os.environ['CLEANER_DEBUG'] = "True"
-        self.assertEqual(self.execute(f'-o{self.temp_output.name}'), 0, "Failed to execute")
-        self.assertEqual(self.execute('-P'), 0, "Failed to rerun")
+        # os.environ['CLEANER_DEBUG'] = "True"
+        self.assertEqual(self.execute(f'-P -o{self.temp_output.name}'), 0, "Failed to execute")
+        self.assertEqual(self.execute(''), 0, "Failed to rerun")
+        self.force_temp_input_to_output()
         self.assertEqual(self.compare(duplicates=False, movies=False, migrated=False, ), 0, self.print_results())
+
 
 if __name__ == '__main__':
     unittest.main()

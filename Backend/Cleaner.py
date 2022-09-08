@@ -1,6 +1,7 @@
 import logging
 import os
 import pickle
+import platform
 import re
 
 import piexif
@@ -86,8 +87,20 @@ class Cleaner:
     def __ne__(self, other) -> bool:
         return not self == other
 
-    def convert(self, migrated_path: Path = None, remove: bool = True) -> CleanerCT:
-        return self  # If required and successful return new Cleaner object / vs self
+    def clean_working_dir(self, folder: Path):
+        for entry in folder.iterdir():
+            if entry.is_dir():
+                self.clean_working_dir(entry)
+            else:
+                if entry.suffix in self.all_images:
+                    logger.debug(f'Cleaning up/deleting: {entry}')
+                    entry.unlink()
+                if entry.suffix in self.all_movies:
+                    logger.debug(f'Cleaning up/deleting: {entry}')
+                    entry.unlink()
+
+    def convert(self, migrated_base: Path, run_path: Path, keep: bool = True, in_place: bool = True) -> CleanerCT:
+        return self  # If required and successful return new Cleaner subclass object / vs self
 
     @property
     def date(self) -> Optional[datetime]:
@@ -121,7 +134,7 @@ class Cleaner:
 
     @cached_property
     def registry_key(self) -> str:
-        target = self.just_name.upper()
+        target = self.path.stem.upper()
         parsed = re.match('(.+)_[0-9]{1,2}$', target)
         if parsed:
             target = parsed.groups()[0]
@@ -551,19 +564,19 @@ class ImageCleaner(Cleaner):
         self.load_image_data()
         return self._image_data
 
-    def convert(self, migrated_base: Path = None, remove: bool = True) -> ImageCT:
+    def convert(self, migrated_base: Path, run_path: Path, keep: bool = True, in_place: bool = True) -> ImageCT:
         """
+        :param run_path: Working directory to store temporary working files
         :param migrated_base:  Where (if any) to archive originals to
-        :param remove:  default: True - Cleanup after successful conversion
-        :return: self or a new object thats updated
+        :param in_place: default: True, if false ????
+        :param keep:  default: True, and if so,  never try and update the input folder
+        :return: self or a new object that's updated
 
         I think this also works with HEIC files
         """
-
+        #  todo: Try this on HEIC files
         if self.path.suffix.upper() != '.HEIC':
             return self
-
-        import platform
 
         if platform.system() == 'Windows':
             logger.error('Conversion from HEIC is not supported on Windows')
@@ -571,36 +584,33 @@ class ImageCleaner(Cleaner):
         else:
             import pyheif
 
-        # todo:  What if input directory is R/O.   Also what right to I have to change this directory
-        save_to = self.get_new_path(base=migrated_base) if migrated_base else None
-        new_name = f'{self.just_path}.jpg'
-        if os.path.exists(new_name):
-            logger.debug(f'Will not convert {self.path} to {new_name} - It already exists')
-        else:
-            heif_file = pyheif.read(self.path)
-            image = Image.frombytes(heif_file.mode,
-                                    heif_file.size,
-                                    heif_file.data,
-                                    "raw",
-                                    heif_file.mode,
-                                    heif_file.stride,
-                                    )
-            exif_dict = None
-            try:
-                for metadata in heif_file.metadata or []:
-                    if metadata['type'] == 'Exif':
-                        exif_dict = piexif.load(metadata['data'])
+        if in_place:
+            keep = False
 
-                if exif_dict:
-                    exif_bytes = piexif.dump(exif_dict)
-                    image.save(new_name, format("JPEG"), exif=exif_bytes)
+        new_name = run_path.joinpath(f'{self.path.stem}.jpg')
+        if new_name.exists():
+            new_name.unlink()
+            logger.debug(f'Cleaning up  {new_name} - It already exists')
 
-                    if save_to:
-                        self.relocate_file(save_to, remove=True, rollover=False)
-                    return ImageCleaner(Path(new_name), self.folder)
+        exif_dict = None
+        heif_file = pyheif.read(self.path)
+        image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw", heif_file.mode,
+                                heif_file.stride)
+        try:
+            for metadata in heif_file.metadata or []:
+                if 'type' in metadata and metadata['type'] == 'Exif':
+                    exif_dict = piexif.load(metadata['data'])
 
-            except AttributeError as e:
-                logger.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
+            if exif_dict:
+                exif_bytes = piexif.dump(exif_dict)
+                image.save(new_name, format("JPEG"), exif=exif_bytes)
+
+                if migrated_base:
+                    self.relocate_file(self.get_new_path(base=migrated_base), remove=not keep, rollover=False)
+                return ImageCleaner(Path(new_name), self.folder)
+
+        except AttributeError as e:
+            logger.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
         return self
 
     def update_image(self):
@@ -862,10 +872,10 @@ class ImageClean:
 
     def __init__(self, app: str, restore=False, **kwargs):
         self.app_name = app
-        run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
-        if not run_path.exists():
-            os.makedirs(run_path, mode=511, exist_ok=True)
-        self.conf_file = run_path.joinpath('config.pickle')
+        self.run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
+        if not self.run_path.exists():
+            os.makedirs(self.run_path, mode=511, exist_ok=True)
+        self.conf_file = self.run_path.joinpath('config.pickle')
 
         # Default option/values
         self.input_folder = Path.home()
@@ -873,11 +883,12 @@ class ImageClean:
         self.verbose = True
         self.do_convert = True  # todo: Provide an option for this
         self.recreate = False
+        self.force_keep = False  # With R/O directories we can not ever try and remove anything
         self.keep_duplicates = False
         self.keep_movie_clips = False
         self.process_all_files = False  # todo: re-evaluate this
         self.keep_converted_files = False
-        self.keep_original_files = False
+        self.keep_original_files = True
         self.do_not_process = []
         self.ignore_folders = []
         self.bad_parents = []
@@ -990,16 +1001,21 @@ class ImageClean:
         self.set_keep_original_files(value)
         self.set_keep_converted_files(value)
         self.set_keep_movie_clips(value)
+        self.force_keep = value
 
     def prepare(self):
         """
         Some further processing once all the options have been set.
         """
 
+        assert os.access(self.output_folder, os.W_OK | os.X_OK)
+        self.force_keep = os.access(self.input_folder, os.W_OK | os.X_OK) | self.force_keep  # in case we are paranoid
+
         if self.output_folder == self.input_folder:
             if self.recreate:
                 assert False, f'Can not recreate with same input/output folders: {self.input_folder}\n\n'
             self.in_place = True
+            self.force_keep = False  # This just makes no sense - even IF paranoid, the point is to move files !
 
         # Make sure we ignore these,  they came from us.
         self.ignore_folders.append(self.output_folder.joinpath(self.movie_path_base))
@@ -1162,7 +1178,7 @@ class ImageClean:
             self.print(f'.... File {entry.path} is invalid.')
             return
 
-        new_entry = entry.convert(self.migrated_path, remove=self.keep_original_files and not self.in_place)
+        new_entry = entry.convert(self.migrated_path, self.run_path, in_place=self.in_place, keep=self.force_keep)
         if id(new_entry) != id(entry):  # The file was converted and cleaned up
             entry = new_entry  # work on the converted file
 
@@ -1184,23 +1200,23 @@ class ImageClean:
         dup_result = self.duplicates_test(entry)
         logger.debug(f'Duplicate Test: {dup_result} - {entry.path}')
         if dup_result == NEW_FILE:  # We have not seen this file before
-            entry.relocate_file(new_path, register=True, remove=not self.keep_original_files or self.in_place,
-                                rollover=True)
+            entry.relocate_file(new_path, register=True,  rollover=True,
+                                remove=not self.keep_original_files or self.in_place or not self.force_keep)
         elif dup_result == SMALL_FILE:  # This file was built by some post processor (apple/windows) importer
-            entry.relocate_file(entry.get_new_path(self.small_path), remove=not self.keep_original_files,
-                                rollover=False)
+            entry.relocate_file(entry.get_new_path(self.small_path), rollover=False,
+                                remove=not self.keep_original_files or not self.force_keep)
         elif dup_result in (GREATER_FILE, LESSER_FILE, EXACT_FILE):
             existing = self.duplicate_get(entry)
             if not entry.path == existing.path:  # We are the same file,  do nothing
                 if dup_result in (LESSER_FILE, EXACT_FILE):
-                    entry.relocate_file(entry.get_new_path(self.duplicate_path),
-                                        remove=not self.keep_original_files or self.in_place,
-                                        create_dir=False, rollover=False)
+                    entry.relocate_file(entry.get_new_path(self.duplicate_path), create_dir=False, rollover=False,
+                                        remove=not self.keep_original_files or self.in_place or not self.force_keep)
                 elif dup_result == GREATER_FILE:
                     existing.relocate_file(existing.get_new_path(self.duplicate_path),
-                                           remove=not self.keep_original_files,
+                                           remove=not self.keep_original_files or not self.force_keep,
                                            create_dir=False, rollover=False)
-                    entry.relocate_file(new_path, register=True, remove=self.in_place, rollover=False)
+                    entry.relocate_file(new_path, register=True, remove=self.in_place or not self.force_keep,
+                                        rollover=False)
         else:
             assert False, f'Invalid test result {dup_result}'
 
@@ -1216,3 +1232,4 @@ class ImageClean:
                 self.process_file(file_cleaner(entry, folder))
             else:
                 self.print(f'. Folder: {entry} ignored ')
+        folder.clean_working_dir(self.run_path)  # Cleans up any temporary files that have been made
