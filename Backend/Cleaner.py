@@ -889,7 +889,6 @@ class ImageClean:
         self.process_all_files = False  # todo: re-evaluate this
         self.keep_converted_files = False
         self.keep_original_files = True
-        self.do_not_process = []
         self.ignore_folders = []
         self.bad_parents = []
         self.progress = 0

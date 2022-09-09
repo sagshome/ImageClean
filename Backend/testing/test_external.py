@@ -173,5 +173,5 @@ class TestExternal(ExternalSetup):
         self.assertEqual(self.compare(duplicates=False, movies=False, migrated=False, ), 0, self.print_results())
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     unittest.main()
