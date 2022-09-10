@@ -477,7 +477,7 @@ class ImageCleaner(Cleaner):
         return not self == other
 
     def __lt__(self, other):
-        # With images,  an later time stamp is less of a file
+        # With images, a later time stamp is less of a file
         if self == other:
             if self.date and not other.date:
                 return True
@@ -622,19 +622,18 @@ class ImageCleaner(Cleaner):
         try:
             exif_dict = piexif.load(str(self.path))
             logger.debug(f'Update Image - success loading {self.path}')
-            if self._date:
+            if self._date or clear_date:
+                changed = True
                 new_date = self._date.strftime("%Y:%m:%d %H:%M:%S")
                 exif_dict['0th'][piexif.ImageIFD.DateTime] = new_date
                 exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = new_date
                 exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
-                changed = True
             if changed:
                 try:
                     exif_bytes = piexif.dump(exif_dict)
                     piexif.insert(exif_bytes, str(self.path))
                 except ValueError as e:
                     logger.error(f'Failed to update {self.path} Error {e}')
-
         except piexif.InvalidImageDataError:
             logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
         except FileNotFoundError:

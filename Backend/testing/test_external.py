@@ -58,14 +58,14 @@ class ExternalSetup(unittest.TestCase):
 
     def execute(self, param: str) -> int:
         executable = f'./Backend/image_clean.py {param} {self.temp_input.name}'
-        return os.system(f'python3 {executable} >> {self.log_file}')
+        return os.system(f'python {executable} >> {self.log_file}')
 
     def _iter_dir(self, setlist, folder, base_length):
         for entry in folder.iterdir():
             if entry.is_dir():
                 self._iter_dir(setlist, entry, base_length)
             else:
-                setlist.add(str(entry)[base_length:])
+                setlist.add(str(entry.as_posix())[base_length:])
 
     @staticmethod
     def _read_dir(setlist, dir_file):
@@ -81,7 +81,7 @@ class ExternalSetup(unittest.TestCase):
         if self.results_file:
             new = set()
             old = set()
-            self._iter_dir(new, Path(self.temp_output.name), len(self.temp_output.name) + 1)
+            self._iter_dir(new, Path(self.temp_output.name), len(str(Path(self.temp_output.name).as_posix())) +1)
             self._read_dir(old, self.results_file)
             for each in new - old:
                 count += 1

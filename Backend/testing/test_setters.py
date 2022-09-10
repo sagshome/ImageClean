@@ -1,7 +1,11 @@
+import os
+import sys
 import unittest
 
 from pathlib import Path
 from Backend.Cleaner import Cleaner, ImageClean, file_cleaner
+sys.path.append(f'{Path.home()}'.joinpath('ImageClean'))  # I got to figure out this hack,
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
 class CleanerUtilsTest(unittest.TestCase):
