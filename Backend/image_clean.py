@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
-from Backend.Cleaner import FileCleaner, FolderCleaner, ImageClean
+from Backend.Cleaner import FileCleaner, FolderCleaner
+from Backend.ImageClean import ImageClean
 
 
 app_path = Path(sys.argv[0])
@@ -120,8 +121,7 @@ if __name__ == '__main__':
     master = FolderCleaner(app.input_folder,
                            parent=None,
                            root_folder=app.input_folder,
-                           output_folder=app.output_folder,
-                           no_date_folder=app.no_date_path)
+                           output_folder=app.output_folder)
     master.description = None
     app.prepare()
     app.process_folder(master)

@@ -3,42 +3,14 @@ import sys
 import unittest
 
 from pathlib import Path
-from Backend.Cleaner import Cleaner, ImageClean, file_cleaner
-sys.path.append(f'{Path.home()}'.joinpath('ImageClean'))  # I got to figure out this hack,
+from Backend.Cleaner import Cleaner, file_cleaner
+from Backend.ImageClean import ImageClean
+sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack,
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
-class CleanerUtilsTest(unittest.TestCase):
-
-    def test_objects(self):
-        for image_type in ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']:
-            my_object = file_cleaner(Path(f'/fake/foo.{image_type}'), None)
-            self.assertEqual('ImageCleaner', my_object.__class__.__name__,
-                             f'Expected ImageCleaner Object - got {my_object.__class__.__name__}')
-        my_object = file_cleaner(Path(f'/fake/foo.text'), None)
-        self.assertEqual('FileCleaner', my_object.__class__.__name__,
-                         f'Expected FileCleaner Object - got {my_object.__class__.__name__}')
-        my_object = file_cleaner(Path.home(), None)
-        self.assertEqual('FolderCleaner', my_object.__class__.__name__,
-                         f'Expected FolderCleaner Object - got {my_object.__class__.__name__}')
 
 
-class CleanerDefaultCompareTest(unittest.TestCase):
-
-    def setUp(self):
-        super(CleanerDefaultCompareTest, self).setUp()
-        self.file1 = Cleaner(Path('/fake/a.file'), None)
-        self.file2 = Cleaner(Path('/fake/b.file'), None)
-
-    def test_compare(self):
-        with self.assertRaises(NotImplementedError):
-            res = self.file1 == self.file2
-        with self.assertRaises(NotImplementedError):
-            res = self.file1 > self.file2
-        with self.assertRaises(NotImplementedError):
-            res = self.file1 < self.file2
-        with self.assertRaises(NotImplementedError):
-            res = self.file1 != self.file2
 
 
 class ImageCleanTest(unittest.TestCase):

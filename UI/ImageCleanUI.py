@@ -193,8 +193,7 @@ class Progress(Widget):
         master = FolderCleaner(cleaner_app.input_folder,
                                parent=None,
                                root_folder=cleaner_app.input_folder,
-                               output_folder=cleaner_app.output_folder,
-                               no_date_folder=cleaner_app.no_date_path)
+                               output_folder=cleaner_app.output_folder)
 
         master.description = None
         cleaner_app.prepare()
