@@ -11,17 +11,12 @@ from functools import cached_property
 from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 from shutil import copyfile
+from tempfile import TemporaryDirectory
 from typing import List, Dict, Optional, TypeVar, Union
 
 logger = logging.getLogger('Cleaner')
 
-NEW_FILE: int = 0
-EXACT_FILE: int = 1
-LESSER_FILE: int = 2
-GREATER_FILE: int = 3
-SMALL_FILE: int = 4
 
-WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 members is a Yellow flag
 IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
 SMALL_IMAGE = 360  # If width and height are less then this, it is thumb nail or some other derived file.
 
@@ -85,20 +80,12 @@ class Cleaner:
     def __ne__(self, other) -> bool:
         return not self == other
 
-    def clean_working_dir(self, folder: Path):
-        for entry in folder.iterdir():
-            if entry.is_dir():
-                self.clean_working_dir(entry)
-            else:
-                if entry.suffix in self.all_images:
-                    logger.debug(f'Cleaning up/deleting: {entry}')
-                    entry.unlink()
-                if entry.suffix in self.all_movies:
-                    logger.debug(f'Cleaning up/deleting: {entry}')
-                    entry.unlink()
-
-    def convert(self, work_dir: Path, migrated_base: Optional[Path], in_place: bool = True) -> ImageCT:
+    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:
         return self  # If required and successful return new Cleaner subclass object / vs self
+
+    @staticmethod
+    def get_hash():  # just for debugging
+        return duplicate_hash  # pragma: no cover
 
     @property
     def date(self) -> Optional[datetime]:
@@ -124,12 +111,13 @@ class Cleaner:
             target = parsed.groups()[0]
         return target
 
-    def de_register(self):
+    def de_register(self, silent=False):
         """
         Remove yourself from the the list of registered FileClean objects
         """
         if not self.is_registered(by_path=True):
-            logger.error(f'Trying to remove non-existent {self.path}) from duplicate_hash')
+            if not silent:
+                logger.error(f'Trying to remove non-existent {self.path}) from duplicate_hash')
         else:
             new_list = []
             for value in duplicate_hash[self.registry_key]:
@@ -194,9 +182,9 @@ class Cleaner:
                     return entry
         return None
 
-    def get_new_path(self, base: Union[Path, None], invalid_parents: Optional[List] = []) -> Optional[Path]:
+    def get_new_path(self, base: Union[Path, None], invalid_parents: List[str] = None) -> Optional[Path]:
         """
-        Using the time stamp and current location build a folder path to where this
+        Using the time stamp and current location/description build a folder path to where this
         file should be moved to.
         :param: base,  is the root folder to build the new path from
         :invalid_parents: A list of strings components that should be excluded from any new path
@@ -210,14 +198,14 @@ class Cleaner:
             invalid_parents = []
 
         date = self.date if self.date else None
-        description = None
+        description_path = None
         if self.folder:
-            description = self.folder.recursive_description_lookup('', invalid_parents)
+            description_path = self.folder.recursive_description_lookup(None, invalid_parents)
             if not date:
                 date = self.folder.date
 
-        if not date and description:
-            return Path(f'{base}{os.path.sep}{description}')
+        if not date and description_path:
+            return base.joinpath(description_path)
 
         if not date:
             return base
@@ -229,64 +217,54 @@ class Cleaner:
             month = self.date.month
             day = self.date.day
 
-        new = str(base)
-        if year and description:
-            new = f'{new}{os.path.sep}{year}{os.path.sep}{description}'
+        new = base
+        if year and description_path:
+            new = base.joinpath(str(year)).joinpath(description_path)
         elif year:
-            new = f'{new}{os.path.sep}{year}'
+            new = base.joinpath(str(year))
             if month:
-                new = f'{new}{os.path.sep}{month}'
+                new = new.joinpath(str(month))
                 if day:
-                    new = f'{new}{os.path.sep}{day}'
-        if not os.path.exists(new):
+                    new = new.joinpath(str(day))
+        if not new.exists():
             os.makedirs(new)
-        return Path(new)
+        return new
 
     def relocate_file(self,
-                      path: Path,
+                      new_path: Path,
                       remove: bool = False,
                       rollover: bool = True,
-                      create_dir: bool = True,
                       register: bool = False):
         """
-        :param path: A string representation of the folder
+        :param new_path: A string representation of the folder
         :param remove: A boolean (default: False) Once successful on the relocate,   remove the original
         :param rollover: A boolean (default: True) rollover an existing file if it exists otherwise ignore
-        :param create_dir: A boolean (default: True), create the directory if it does not exist,  if false and the
         :param register: A boolean (default:False), register this value after the move
         directory does not exist abort!
         :return:
         """
 
-        if not path:
-            logger.debug('Attempted to relocate to NONE')
-            return
+        new = None
+        if new_path:
+            if not new_path.exists():
+                os.makedirs(new_path)
+            new = new_path.joinpath(self.path.name)
 
-        if not os.path.exists(path):
-            if create_dir:
-                os.makedirs(path)
-            else:
-                logger.debug(f'Create Dir is {create_dir},  not going to move {self.path.name} to {path}')
-                return
-
-        new = path.joinpath(self.path.name)
-        logger.debug(f'Copy {self.path} to {new}')
-        if os.path.exists(new):
-            if rollover:
+            if new.exists() and rollover:
                 logger.debug(f'Rolling over {new}')
                 self.rollover_name(new)
-                copyfile(str(self.path), new)
             else:
-                logger.error(f'Will not overwrite {new}')
-
-        else:
+                logger.debug(f'Will not overwrite {new}')
             copyfile(str(self.path), new)
+
         if remove:
             try:
+                self.de_register(silent=True)
                 os.unlink(self.path)
             except OSError as e:
                 logger.debug(f'{self.path} could not be removed ({e}')
-        if register:
+
+        if register and new:
             self.path = new
             self.register()
 
@@ -296,8 +274,7 @@ class Cleaner:
         :return: datetime or None
         """
         parser_values = [  # Used to loop over _get_date_from_path_name
-            ['^([0-9]{8})-([0-9]{6})$', '%Y%m%d%H%M%S', 3],
-            ['^([0-9]{8})_([0-9]{6})$', '%Y%m%d%H%M%S', 3],  # todo: clom these two up together using [-_] or .
+            ['^([0-9]{8}).([0-9]{6}).*$', '%Y%m%d%H%M%S', 3],
             ['^([0-9]{4}).([0-9]{2}).([0-9]{2}).*', '%Y%m%d', 3],
             ['^([0-9]{2}).([a-zA-Z]{3}).([0-9]{4}).*', '%d%b%Y', 3],
             ['^([0-9]{4}).([0-9]{2}).+', '%Y%m', 2]
@@ -310,7 +287,7 @@ class Cleaner:
                 date_string = "".join(re_array[0:array_max])
                 try:
                     return datetime.strptime(date_string, date_format)
-                except ValueError:
+                except ValueError:  # pragma: no cover
                     logger.debug(f'Could not convert {date_string} of {self.path.name} to a date')
             return None
 
@@ -377,6 +354,16 @@ class Cleaner:
             root_path_list.pop()
         duplicate_hash.clear()
 
+    @classmethod
+    def add_to_root_path(cls, some_path: Path):
+        path = str(some_path)
+        if path not in root_path_list:
+            root_path_list.append(path)
+
+    @classmethod
+    def get_root_path(cls):  # just for debugging
+        return root_path_list  # pragma: no cover
+
 
 class FileCleaner(Cleaner):
 
@@ -437,7 +424,7 @@ class ImageCleaner(Cleaner):
     def __init__(self, path_entry: Path, folder: FolderCT = None):
         super().__init__(path_entry, folder)
 
-        self._image = None
+        self._image = None  # todo: Real image time > then name/dir time.  Maybe stop updating image time.
         self._image_data = []
 
     def __eq__(self, other: ImageCT):
@@ -461,11 +448,10 @@ class ImageCleaner(Cleaner):
     def __lt__(self, other):
         # With images, a later time stamp is less of a file
         if self == other:
-            print(self.date, other.date)
             if self.date and not other.date:
                 return False
             if not self.date and other.date:
-                return True  # 314, 318
+                return True
             if self.date and other.date:
                 return self.date > other.date
         return False
@@ -474,9 +460,9 @@ class ImageCleaner(Cleaner):
         # With images,  a lesser timestamp is more of a file
         if self == other:
             if self.date and not other.date:
-                return True  # 313
+                return True
             if not self.date and other.date:
-                return False  # 319
+                return False
             if self.date and other.date:
                 return self.date < other.date
         return False
@@ -503,8 +489,8 @@ class ImageCleaner(Cleaner):
                 self._date = self.get_date_from_path_name() or self.get_date_from_folder_names()
                 if not self._date and self.folder:
                     self._date = self.folder.date
-                if self._date:
-                    self.update_image()
+            #    if self._date:
+            #        self.update_image()
         return self._date
 
     # Ensure we have a date for the existing image
@@ -546,7 +532,7 @@ class ImageCleaner(Cleaner):
         self.load_image_data()
         return self._image_data
 
-    def convert(self, work_dir: Path, migrated_base: Optional[Path], in_place: bool = True) -> ImageCT:
+    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:
         """
         Convert HEIC files to jpg files.   Do the conversion in the run_path since we shouldn't update existing dir.
 
@@ -578,12 +564,13 @@ class ImageCleaner(Cleaner):
 
         original_name = self.path
         new_name = work_dir.joinpath(f'{self.path.stem}.jpg')
+
         if new_name.exists():
             new_name.unlink()
             logger.debug(f'Cleaning up {new_name} - It already exists')
 
         exif_dict = None
-        heif_file = pyheif.read(self.path)
+        heif_file = pyheif.read(original_name)
         image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw", heif_file.mode, heif_file.stride)
         try:
             for metadata in heif_file.metadata or []:
@@ -592,10 +579,10 @@ class ImageCleaner(Cleaner):
             if exif_dict:
                 exif_bytes = piexif.dump(exif_dict)
                 image.save(new_name, format("JPEG"), exif=exif_bytes)
-
+                # todo:  Another bug,   we loose path info on the converted file
                 if migrated_base:
-                    self.relocate_file(self.get_new_path(base=migrated_base), remove=True, rollover=False)
-                elif in_place:
+                    self.relocate_file(self.get_new_path(base=migrated_base), remove=remove, rollover=False)
+                elif remove:
                     original_name.unlink()
                 return ImageCleaner(Path(new_name), self.folder)
         except AttributeError as e:  # pragma: no cover
@@ -603,11 +590,12 @@ class ImageCleaner(Cleaner):
             logger.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
         return self  # pragma: no cover
 
+    """
     def update_image(self):
-        """
+        '''
         Update an image file with the data provided
         :return: None
-        """
+        '''
         changed = False
         try:
             exif_dict = piexif.load(str(self.path))
@@ -628,6 +616,7 @@ class ImageCleaner(Cleaner):
             logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
         except FileNotFoundError:  # pragma: no cover
             logger.error(f'Failed to load {self.path} - File not Found')
+    """
 
     def get_date_from_image(self):
         """
@@ -678,7 +667,8 @@ class FolderCleaner(Cleaner):
     def __init__(self, path_entry: Path,
                  root_folder: Path = None,
                  output_folder: Path = None,
-                 parent: FolderCT = None):
+                 parent: FolderCT = None,
+                 app_name: str = None):
 
         super().__init__(path_entry, parent)
 
@@ -688,12 +678,14 @@ class FolderCleaner(Cleaner):
         if output_folder and str(output_folder) not in root_path_list:
             root_path_list.append(str(output_folder))
 
-        self.description: Optional[str] = self.get_description_from_path()
+        self.description: Optional[str] = self.get_description_from_path(app_name)
         self.parent: Optional[FolderCT] = parent
 
     def __eq__(self, other):
         # Comparison is based first on custom folder (vs just arbitrary dates)
-        if self.custom_folder and other.custom_folder or (not self.custom_folder and not other.custom_folder):
+        if self.custom_folder and other.custom_folder:
+            return True
+        if self.date and other.date:
             return True
         return False
 
@@ -702,7 +694,13 @@ class FolderCleaner(Cleaner):
 
     def __lt__(self, other):
         if not self == other:
-            if not self.custom_folder:
+            if self.custom_folder:
+                return False
+            if other.custom_folder:
+                return True
+            if self.date:
+                return False
+            if other.date:
                 return True
         return False
 
@@ -710,6 +708,12 @@ class FolderCleaner(Cleaner):
         if not self == other:
             if self.custom_folder:
                 return True
+            if other.custom_folder:
+                return False
+            if self.date:
+                return True
+            if other.date:
+                return False
         return False
 
     @property
@@ -732,12 +736,14 @@ class FolderCleaner(Cleaner):
         """
         A utility to test if the folder was explicitly named (thus custom)
 
-        A custom folder is a folder that does not end with a date format YYYY/MM/DD but has the date format in it
+        A custom folder is a folder that does not end with a date format YYYY/MM/DD and is not a folder from the root
+        path list.
         :return: boolean  - True if a custom folder
 
         .../2012/3/3/foobar is custom
         .../foo/bar is NOT custom
         .../2012/3/3 is NOT managed
+        .../foobar/2012/3/3 ??? should this be custom
         """
 
         folder = str(self.path)
@@ -757,7 +763,7 @@ class FolderCleaner(Cleaner):
             # Use the parent date
         return self._date
 
-    def get_description_from_path(self) -> Optional[str]:
+    def get_description_from_path(self, app_name) -> Optional[str]:
         """
         - pictures/2021/10/11
         - pictures/2014/2014/06/30
@@ -785,6 +791,8 @@ class FolderCleaner(Cleaner):
             return None
         elif re.match('^[0-9]{8}-[0-9]{6}$', self.path.name):  # Pure Date
             return None
+        elif app_name and self.path.name.startswith(app_name):
+            return None
         else:
             try:
                 int(self.path.name)
@@ -810,9 +818,10 @@ class FolderCleaner(Cleaner):
 
         return description if description != '' else None
 
-    def recursive_description_lookup(self, current_description: str, to_exclude) -> str:
+    def recursive_description_lookup(self, current_description: Union[Path, None], to_exclude: List[str]) -> str:
         """
-        Recurse your parents to build up path based on descriptive folder names
+        Recurse your folders to build up path based on descriptive folder names
+        ..../foo/bar/foobar/my.file
         :param current_description:  a string with the build up path
         :param to_exclude: an array of path components that we don't want to include in description tree
 
@@ -820,9 +829,12 @@ class FolderCleaner(Cleaner):
         """
         if self.description:
             if self.description not in to_exclude:
-                current_description = f'{os.path.sep}{self.description}{current_description}'
-            if self.parent:
-                current_description = self.parent.recursive_description_lookup(current_description, to_exclude)
+                if current_description:
+                    current_description = Path(self.description).joinpath(current_description)
+                else:
+                    current_description = Path(self.description)
+        if self.folder:
+            current_description = self.folder.recursive_description_lookup(current_description, to_exclude)
         return current_description
 
     @staticmethod

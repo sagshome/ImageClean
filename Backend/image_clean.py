@@ -6,6 +6,7 @@ import sys
 
 from datetime import datetime
 from pathlib import Path
+
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 from Backend.Cleaner import FileCleaner, FolderCleaner
@@ -22,8 +23,8 @@ app_help = f'{app_name} -hdmsaruPV -i <ignore_folder>... -n <non_description_fol
            f'Used to clean up directories.' \
            f'\n\n-h: This help' \
            f'\n-d: Save duplicate files into {app.duplicate_path_base}' \
-           f'\n-m: Save movie-clips that are also images (iphone live picture movies) into {app.movie_path_base}' \
-           f'\n-c: Save original images that were successfully converted (HEIC) to JPG into {app.converted_path_base}' \
+           f'\n-m: Save movie-clips that are images (iphone live picture movies) into {app.image_movies_path_base}' \
+           f'\n-c: Save original images that were successfully converted (HEIC) to JPG into {app.migrated_path_base}' \
            f'\n-a: Process all files,   ignore anything that is not an image' \
            f'\n-r: Recreate the output folder (not valid without -o)' \
            f'\n-s: safe import, keep original files when processed'\
@@ -116,19 +117,7 @@ if __name__ == '__main__':
             app.set_paranoid(True)
 
     app.output_folder = Path(output) if output else app.input_folder
-
     print(f'logging to...{log_file}') if verbose else None
-    master = FolderCleaner(app.input_folder,
-                           parent=None,
-                           root_folder=app.input_folder,
-                           output_folder=app.output_folder)
-    master.description = None
-    app.prepare()
-    app.process_folder(master)
-
-    # Clean up
-    master.reset()
-    app.process_duplicates_movies(FolderCleaner(app.no_date_path, root_folder=app.no_date_path))
-    suspicious_folders = app.audit_folders(app.output_folder)
+    app.run()
     # todo: roll back small files that are unique
     logger.debug(f'Completed ({datetime.now() - start_time}')
