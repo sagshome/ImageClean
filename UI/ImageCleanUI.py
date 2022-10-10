@@ -16,7 +16,9 @@ from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, Num
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
-from Backend.Cleaner import ImageClean, FileCleaner, FolderCleaner
+from Backend.Cleaner import FileCleaner, FolderCleaner
+from Backend.ImageClean import ImageClean
+
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
 app_path = Path(sys.argv[0])
