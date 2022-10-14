@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import random
 import re
 
 import piexif
@@ -29,11 +30,18 @@ FolderCT = TypeVar("FolderCT", bound="FolderCleaner")
 duplicate_hash: Dict[str, List[CT]] = {}  # This hash is used to store processed files
 root_path_list: List[str] = []  # some folders we have to ignore for folder comparisons
 
+IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
+
+# Inter-instance data
+PICTURE_FILES = ['.jpg', '.jpeg', '.tiff', '.tif', '.png', '.bmp', ]
+PICTURE_FILES.append('.heic')  # Not supported by pillow,  but a key reason for this endeavor
+MOVIE_FILES = ['.mov', '.avi', '.mp4']
+
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
     if file.is_dir():
         return FolderCleaner(file, parent=folder)
-    if file.suffix.upper() in IMAGE_FILES:
+    if file.suffix.lower() in PICTURE_FILES or file.suffix.lower() in MOVIE_FILES:
         return ImageCleaner(file, folder)
     else:
         return FileCleaner(file, folder)
@@ -46,22 +54,8 @@ class Cleaner:
     A class to encapsulate the Path object that is going to be cleaned
     """
 
-    # Inter-instance data
-    PICTURE_FILES = ['.JPG', '.HEIC', '.THM', '.RTF', '.PNG', '.JPEG', '.TIFF']
-    MOVIE_FILES = ['.MOV', '.AVI', '.MP4']
-
-    all_images = []
-    all_movies = []
 
     def __init__(self, path_entry: Path, folder: FileCT = None):
-
-        if not self.all_images:
-            for item in self.PICTURE_FILES:
-                self.all_images.append(item.upper())
-                self.all_images.append(item.lower())
-            for item in self.MOVIE_FILES:
-                self.all_movies.append(item.upper())
-                self.all_movies.append(item.lower())
 
         self.path = path_entry
         self.folder = folder
@@ -346,6 +340,8 @@ class Cleaner:
                 new_path = f'{destination.parent}{os.path.sep}{basename}_{increment + 1}{destination.suffix}'
                 if os.path.exists(old_path):
                     os.rename(old_path, new_path)
+                else:
+                    break
             os.rename(destination, f'{destination.parent}{os.path.sep}{basename}_0{destination.suffix}')
 
     @classmethod
@@ -434,12 +430,15 @@ class ImageCleaner(Cleaner):
         :return:
         """
         if self.__class__ == other.__class__:
-            if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
-                return True
-            # Try the hard way
-            self.load_image_data()
-            other.load_image_data()
-            return self._image_data == other._image_data
+            try:
+                if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
+                    return True
+                # Try the hard way
+                self.load_image_data()
+                other.load_image_data()
+                return self._image_data == other._image_data
+            except:
+                pass
         return False
 
     def __ne__(self, other):
@@ -552,7 +551,6 @@ class ImageCleaner(Cleaner):
 
         I think this also works with HEIC files
         """
-        #  todo: Try this on HEIC files
         if self.path.suffix.upper() not in self.CONVERSION_SUFFIX:
             return self
 
@@ -749,7 +747,8 @@ class FolderCleaner(Cleaner):
         folder = str(self.path)
         if not re.match('.*[0-9]{4}.[0-9]{1,2}.[0-9]{1,2}$', folder):
             if folder not in root_path_list:
-                return True
+                if self.description:
+                    return True
         return False
 
     @cached_property

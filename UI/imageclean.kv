@@ -104,9 +104,21 @@
         load_callback: self.set_output
         show_new_button: 1
     CheckBoxItem:
-        text: "Recreate - recreate output folder - Forces a backup of any previous file!"
+        text: "Recreate - recreate output folder - Forces a backup"
         check_value: False
         callback: self.set_recreate
+    CheckBoxItem:
+        text: "Keep Originals - Don't remove original files!"
+        check_value: True
+        callback: self.set_keep_originals
+    CheckBoxItem:
+        text: "Save suspect files - Duplicates/Movie Clips/Converted images!"
+        check_value: False
+        callback: self.set_keep_others
+    CheckBoxItem:
+        text: "Look for small files - Old thumbnails,  will cause all files to be read."
+        check_value: False
+        callback: self.set_process_small
     FolderSelector:
         size_hint_y: 1
         default_scrolling: True

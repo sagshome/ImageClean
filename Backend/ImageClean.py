@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
 
-from Backend.Cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner
+from Backend.Cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
 
 
 logger = logging.getLogger('Cleaner')
@@ -320,7 +320,7 @@ class ImageClean:
         """
         for entry in self.movie_list:
             for item in entry.get_all_registered():
-                if item.path.suffix in item.all_images:
+                if item.path.suffix in PICTURE_FILES:
                     entry.de_register()
                     if self.keep_movie_clips:
                         entry.relocate_file(self.image_movies_path, remove=True, rollover=False, register=False)
@@ -362,8 +362,8 @@ class ImageClean:
             entry = new_entry  # work on the converted file
 
         if not self.process_all_files:
-            if entry.path.suffix not in entry.all_images:
-                if entry.path.suffix in entry.all_movies:
+            if entry.path.suffix.lower() not in PICTURE_FILES:
+                if entry.path.suffix.lower() in MOVIE_FILES:
                     self.movie_list.append(entry)
                 else:
                     self.print(f'.... Ignoring non image file {entry.path}')

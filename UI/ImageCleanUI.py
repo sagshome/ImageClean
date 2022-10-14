@@ -94,6 +94,24 @@ class CheckBoxItem(BoxLayout):
         cleaner_app.set_recreate(touch)
         logger.debug(f'recreate is {touch}')
 
+    @staticmethod
+    def set_keep_originals(touch):
+        cleaner_app.set_keep_original_files(touch)
+        logger.debug(f'keep_originals is {touch}')
+
+    @staticmethod
+    def set_keep_others(touch):
+        cleaner_app.set_keep_duplicates(touch)
+        cleaner_app.set_keep_converted_files(touch)
+        cleaner_app.set_keep_movie_clips(touch)
+        logger.debug(f'keep_others is {touch}')
+
+    @staticmethod
+    def set_process_small(touch):
+        #cleaner_app.set_keep_original_files(touch)
+        logger.debug(f'process small is {touch}')
+
+
 
 class LoadDialog(FloatLayout):
     def __init__(self, load_path=None, rooted=False, visible=1, multiselect=False, **kwargs):

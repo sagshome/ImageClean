@@ -3,6 +3,7 @@ import stat
 import time
 
 import piexif
+import platform
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ import unittest
 from datetime import datetime, timedelta
 from freezegun import freeze_time
 from pathlib import Path
+from PIL import Image, ImageDraw
 from shutil import copyfile
 from typing import Union
 from unittest import mock
@@ -20,57 +22,10 @@ import pytest
 from Backend.Cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner
 from Backend.ImageClean import NEW_FILE, EXACT_FILE, LESSER_FILE, GREATER_FILE, SMALL_FILE, WARNING_FOLDER_SIZE
 from Backend.ImageClean import ImageClean
+from Utilities.test_utilities import create_image_file, count_files, set_date, copy_file, DATE_SPEC, DIR_SPEC
 
 sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack,
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-
-DATE_SPEC = datetime(1961, 9, 27)
-DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
-
-
-def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
-    if not out_path.exists():
-        os.makedirs(out_path)
-
-    new_name = in_file.name if not new_name else new_name
-    new = out_path.joinpath(new_name)
-    copyfile(str(in_file), new)
-    return new
-
-
-def set_date(original_file: Path, new_date: Union[datetime, None]):
-    """
-    Given a physical file,  move the file to the input directory
-    original_file:  The file to process
-    new_date: date_string to put into file
-    move_to_input: If set,  copy the file to this location.
-    :return: None
-    """
-    exif_dict = piexif.load(str(original_file))
-    if not new_date:
-        if piexif.ImageIFD.DateTime in exif_dict['0th']:
-            del (exif_dict['0th'][piexif.ImageIFD.DateTime])
-        if piexif.ExifIFD.DateTimeOriginal in exif_dict['Exif']:
-            del (exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal])
-        if piexif.ExifIFD.DateTimeDigitized in exif_dict['Exif']:
-            del (exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized])
-    else:
-        new_date = new_date.strftime("%Y:%m:%d %H:%M:%S")
-        exif_dict['0th'][piexif.ImageIFD.DateTime] = new_date
-        exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = new_date
-        exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
-
-    # Save changes
-    exif_bytes = piexif.dump(exif_dict)
-    piexif.insert(exif_bytes, str(original_file))
-
-
-def count_files(path: Path):
-    count = 0
-    for _, _, files_list in os.walk(path):
-        for file in files_list:
-            count += 1
-    return count
 
 
 class ActualScenarioTest(unittest.TestCase):
@@ -107,6 +62,123 @@ class ActualScenarioTest(unittest.TestCase):
         self.jpg_file = self.my_location.joinpath('data').joinpath('jpeg_image.jpg')
 
         # print(f'{str(self)} - {self.temp_base.name}')
+
+    @patch('pathlib.Path.home')
+    def test_failed_scenerio(self, home):
+        """
+        These file are all 'slightly' different, real program fails,  I think it is do to rollover
+
+        ./20-Jul-2013/DSC01580.JPG
+        ./2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q/DSC01580.jpg
+        ./2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ/DSC01580_2.jpg
+        ./2013/2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q/DSC01580.jpg
+        ./2013/2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ/DSC01580_2.jpg
+        ./2014/2014/03/12/20140312-161504/+LWO7UezQICChJ0synnadg/DSC01580.jpg
+
+        expect:
+
+
+
+        """
+        home.return_value = Path(self.temp_base.name)
+        f1 = copy_file(Path('/shared/pictures/20-Jul-2013/DSC01580.JPG'),
+                       self.input_folder.joinpath('20-Jul-2013'))
+        f2 = copy_file(Path('/shared/pictures/2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q/DSC01580.jpg'),
+                       self.input_folder.joinpath('2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q'))
+        f3 = copy_file(Path('/shared/pictures/2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ/DSC01580_2.jpg'),
+                       self.input_folder.joinpath('2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ/'))
+        f4 = copy_file(Path('/shared/pictures/2013/2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q/DSC01580.jpg'),
+                       self.input_folder.joinpath('2013/2013/08/13/20130813-111949/ALxwKmsGTEueOPoo+7I02Q'))
+        f5 = copy_file(Path('/shared/pictures/2013/2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ/DSC01580_2.jpg'),
+                       self.input_folder.joinpath('2013/2013/08/13/20130813-111949/RD98zH2uTvWNtvZlj%+lHQ'))
+        f6 = copy_file(Path('/shared/pictures/2014/2014/03/12/20140312-161504/+LWO7UezQICChJ0synnadg/DSC01580.jpg'),
+                       self.input_folder.joinpath('2014/2014/03/12/20140312-161504/+LWO7UezQICChJ0synnadg'))
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
+        cleaner.set_keep_original_files(False)
+        cleaner.verbose = False
+        cleaner.run()
+        pass
+
+    @patch('pathlib.Path.home')
+    def test_restart_ignore_custom_folder(self, home):
+        """
+
+            ./Input/1961/9/27/internal_date.jpg
+            ./Input/1961/9/27/struct_date.jpg
+            ./Input/1961/9/27/19610927-010101.jpg
+            ./Input/1961/CustomName/struct_date_custom.jpg
+            ./Input/1961/CustomName/19610927-010101_custom.jpg
+            ./Input/1961/CustomName/internal_date_custom.jpg
+            ./Input/test_instance_NoDate/nodate.jpg
+            ./Input/test_instance_NoDate/CustomName/no_date_custom.jpg
+
+            after
+
+            ./Input/1961/9/27/internal_date.jpg
+            ./Input/1961/9/27/struct_date.jpg
+            ./Input/1961/9/27/19610927-010101.jpg
+            ./Input/1961/9/27/struct_date_custom.jpg
+            ./Input/1961/9/27/19610927-010101_custom.jpg
+            ./Input/1961/9/27/internal_date_custom.jpg
+            ./Input/test_instance_NoDate/nodate.jpg
+            ./Input/test_instance_NoDate/no_date_custom.jpg
+
+        """
+        home.return_value = Path(self.temp_base.name)
+
+        duplicate_path_base = self.input_folder.joinpath(f'{self.app_name}_Duplicates')
+        image_movies_path_base = self.input_folder.joinpath(f'{self.app_name}_ImageMovies')
+        migrated_path_base = self.input_folder.joinpath(f'{self.app_name}_Migrated')
+        no_date_base = self.input_folder.joinpath(f'{self.app_name}_NoDate')
+        small_base = self.input_folder.joinpath(f'{self.app_name}_Small')
+
+        no_date = copy_file(self.jpg_file, no_date_base, new_name='no_date.jpg')
+        set_date(no_date, None)
+
+        internal_date = copy_file(self.jpg_file, self.input_folder.joinpath(DIR_SPEC), new_name='internal_date.jpg')
+        set_date(internal_date, DATE_SPEC)
+
+        filename_date = copy_file(no_date,
+                                  self.input_folder.joinpath(DIR_SPEC),
+                                  new_name=f'{DATE_SPEC.strftime("%Y%m%d-010101")}.jpg')
+        struct_date = copy_file(no_date,
+                                self.input_folder.joinpath(DIR_SPEC),
+                                new_name='struct_date.jpg')
+        no_date_custom = copy_file(no_date,
+                                   self.input_folder.joinpath('custom'),
+                                   new_name='no_date_custom.jpg')
+        date_custom = copy_file(internal_date,
+                                self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom'),
+                                new_name='internal_date_custom.jpg')
+        name_custom = copy_file(no_date,
+                                self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom'),
+                                new_name=f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg')
+        struct_custom = copy_file(no_date,
+                                  self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom'),
+                                  new_name='struct_date_custom.jpg')
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.input_folder)
+        cleaner.set_keep_original_files(False)
+        cleaner.verbose = False
+        cleaner.add_bad_parents('custom')
+        cleaner.run()
+
+        self.assertTrue(no_date.exists())
+        self.assertTrue(internal_date.exists())
+        self.assertTrue(filename_date.exists())
+        self.assertTrue(struct_date.exists())
+        # This will fail but I am still checking in.   The problem is that original is custom, but we changed the
+        # bad_parents so the  should not exist.  but test dups returns lesser
+        self.assertFalse(no_date_custom.exists())
+        self.assertFalse(date_custom.exists())
+        self.assertFalse(name_custom.exists())
+        self.assertFalse(struct_custom.exists())
+
+        self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath(date_custom.name).exists())
+        self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath(name_custom.name).exists())
+        self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath(struct_custom.name).exists())
+        self.assertTrue(cleaner.no_date_path.joinpath(no_date_custom.name).exists())
 
     @patch('pathlib.Path.home')
     def test_restart_no_changes(self, home):
