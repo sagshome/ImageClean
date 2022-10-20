@@ -20,7 +20,7 @@ from freezegun import freeze_time
 import pytest
 
 from Backend.cleaner import Cleaner
-from Backend.ImageClean import ImageClean
+from Backend.image_clean import ImageClean
 from Utilities.test_utilities import create_image_file, count_files, set_date, copy_file, DATE_SPEC, DIR_SPEC
 
 sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack,
@@ -1251,7 +1251,7 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         cleaner.run()
         my_print.assert_called()
 
-    @patch('Backend.ImageClean.WARNING_FOLDER_SIZE', 2)
+    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     def test_audit_folders(self, home):
         home.return_value = Path(self.temp_base.name)
@@ -1273,7 +1273,7 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         self.assertTrue(output_path.joinpath(two.name).exists(), 'Image two processed')
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.ImageClean.WARNING_FOLDER_SIZE', 2)
+    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     def test_audit_folders_1(self, home):
         home.return_value = Path(self.temp_base.name)
@@ -1286,7 +1286,7 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         cleaner.run()
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.ImageClean.WARNING_FOLDER_SIZE', 2)
+    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     def test_audit_folders_2(self, home):
         home.return_value = Path(self.temp_base.name)
@@ -1299,6 +1299,7 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         cleaner.verbose = False
         cleaner.run()
         self.assertEqual(len(cleaner.suspicious_folders), 1, 'Large folders')
+
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()

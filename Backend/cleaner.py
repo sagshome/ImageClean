@@ -303,7 +303,7 @@ class Cleaner:
                 return value
         return None
 
-    def get_date_from_folder_names(self) -> Optional[datetime]:
+    def get_date_from_folder_names(self) -> Optional[datetime]:  # pylint: disable=inconsistent-return-statements
         """
         Maybe not the best way but this need to work on the folder part if it is a file vs an actual folder
         :return:
@@ -625,7 +625,7 @@ class ImageCleaner(Cleaner):
             logger.error('Conversion error: %s - Reason %s is no metadata attribute', self.path, error)
         return self  # pragma: no cover
 
-    def get_date_from_image(self) -> Union[datetime, None]:
+    def get_date_from_image(self) -> Union[datetime, None]:  # pylint: disable=inconsistent-return-statements
         """
         Given an Image object,  attempt to extract the date it was take at
         :return: datetime

@@ -17,7 +17,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
 from Backend.cleaner import FileCleaner, FolderCleaner
-from Backend.ImageClean import ImageClean
+from Backend.image_clean import ImageClean
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
