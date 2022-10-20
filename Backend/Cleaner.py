@@ -1,3 +1,11 @@
+"""
+This is a base class/classes for providing a standard set of attribute on Files/Folders.
+
+- Comparison operators
+- Registrar based hash
+-
+
+"""
 import logging
 import os
 import platform
@@ -28,19 +36,21 @@ FolderCT = TypeVar("FolderCT", bound="FolderCleaner")
 
 # A couple of caches
 duplicate_hash: Dict[str, List[CT]] = {}  # This hash is used to store processed files
+folders: Dict[str, FolderCT] = {}  # This is used to store folders
 root_path_list: List[str] = []  # some folders we have to ignore for folder comparisons
 
-IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
 
 # Inter-instance data
-PICTURE_FILES = ['.jpg', '.jpeg', '.tiff', '.tif', '.png', '.bmp', ]
-PICTURE_FILES.append('.heic')  # Not supported by pillow,  but a key reason for this endeavor
+PICTURE_FILES = ['.jpg', '.jpeg', '.tiff', '.tif', '.png', '.bmp', '.heic']
 MOVIE_FILES = ['.mov', '.avi', '.mp4']
 
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
     if file.is_dir():
-        return FolderCleaner(file, parent=folder)
+        key = str(file)
+        if key not in folders:
+            folders[key] = FolderCleaner(file, parent=folder)
+        return folders[key]
     if file.suffix.lower() in PICTURE_FILES or file.suffix.lower() in MOVIE_FILES:
         return ImageCleaner(file, folder)
     else:
@@ -54,12 +64,12 @@ class Cleaner:
     A class to encapsulate the Path object that is going to be cleaned
     """
 
-
     def __init__(self, path_entry: Path, folder: FileCT = None):
 
         self.path = path_entry
         self.folder = folder
         self._date = None
+        self.explicit_date = False
 
     def __eq__(self, other) -> bool:
         # Ensure you test that self.path.name == other.path.name and self.__class__ == other.__class__
@@ -78,7 +88,7 @@ class Cleaner:
         return self  # If required and successful return new Cleaner subclass object / vs self
 
     @staticmethod
-    def get_hash():  # just for debugging
+    def get_hash():  # Used for post processing
         return duplicate_hash  # pragma: no cover
 
     @property
@@ -104,6 +114,15 @@ class Cleaner:
         if parsed:
             target = parsed.groups()[0]
         return target
+
+    def register(self):
+        if self.is_registered(by_path=True, by_file=True):
+            logger.error(f'Trying to re_register {self.path})')
+        else:
+            key = self.registry_key
+            if key not in duplicate_hash:
+                duplicate_hash[key] = []
+            duplicate_hash[key].append(self)
 
     def de_register(self, silent=False):
         """
@@ -139,15 +158,6 @@ class Cleaner:
             return duplicate_hash[self.registry_key]
         return []
 
-    def register(self):
-        if self.is_registered(by_path=True, by_file=True):
-            logger.error(f'Trying to re_register {self.path})')
-        else:
-            key = self.registry_key
-            if key not in duplicate_hash:
-                duplicate_hash[key] = []
-            duplicate_hash[key].append(self)
-
     def get_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False,
                        alternate_path: Path = None) \
             -> Optional[FileCT]:
@@ -176,53 +186,7 @@ class Cleaner:
                     return entry
         return None
 
-    def get_new_path(self, base: Union[Path, None], invalid_parents: List[str] = None) -> Optional[Path]:
-        """
-        Using the time stamp and current location/description build a folder path to where this
-        file should be moved to.
-        :param: base,  is the root folder to build the new path from
-        :invalid_parents: A list of strings components that should be excluded from any new path
-        :return:  A Path representing where this file should be moved or None, if the base path was None
-        """
-
-        if not base:
-            return None
-
-        if not invalid_parents:
-            invalid_parents = []
-
-        date = self.date if self.date else None
-        description_path = None
-        if self.folder:
-            description_path = self.folder.recursive_description_lookup(None, invalid_parents)
-            if not date:
-                date = self.folder.date
-
-        if not date and description_path:
-            return base.joinpath(description_path)
-
-        if not date:
-            return base
-
-        year = month = day = None
-        # Bug... all folders have a time.
-        if self.date:
-            year = self.date.year
-            month = self.date.month
-            day = self.date.day
-
-        new = base
-        if year and description_path:
-            new = base.joinpath(str(year)).joinpath(description_path)
-        elif year:
-            new = base.joinpath(str(year))
-            if month:
-                new = new.joinpath(str(month))
-                if day:
-                    new = new.joinpath(str(day))
-        if not new.exists():
-            os.makedirs(new)
-        return new
+    # File manipulation
 
     def relocate_file(self,
                       new_path: Path,
@@ -243,11 +207,13 @@ class Cleaner:
             if not new_path.exists():
                 os.makedirs(new_path)
             new = new_path.joinpath(self.path.name)
-
+            if self.path == new:
+                logger.debug(f'Will not copy to myself {new}')
+                return
             if new.exists() and rollover:
                 logger.debug(f'Rolling over {new}')
                 self.rollover_name(new)
-            else:
+            else:  # todo: this is not true the 'and' does not make sense
                 logger.debug(f'Will not overwrite {new}')
             copyfile(str(self.path), new)
 
@@ -260,6 +226,7 @@ class Cleaner:
 
         if register and new:
             self.path = new
+            self.folder = file_cleaner(new_path, None)
             self.register()
 
     def get_date_from_path_name(self) -> Optional[datetime]:
@@ -268,10 +235,11 @@ class Cleaner:
         :return: datetime or None
         """
         parser_values = [  # Used to loop over _get_date_from_path_name
-            ['^([0-9]{8}).([0-9]{6}).*$', '%Y%m%d%H%M%S', 3],
-            ['^([0-9]{4}).([0-9]{2}).([0-9]{2}).*', '%Y%m%d', 3],
-            ['^([0-9]{2}).([a-zA-Z]{3}).([0-9]{4}).*', '%d%b%Y', 3],
-            ['^([0-9]{4}).([0-9]{2}).+', '%Y%m', 2]
+            ['^([0-9]{8}).([0-9]{6}).*$', '%Y%m%d', 1],
+            ['^([0-9]{4}).([0-9]{1,2}).([0-9]{1,2}).*', '%Y%m%d', 3],
+            ['^([0-9]{1,2}).([a-zA-Z]{3}).([0-9]{4}).*', '%d%b%Y', 3],
+            ['^([0-9]{4}).([0-9]{1,2})[^0-9].*', '%Y%m', 2],
+            ['^([0-9]{4}).[^0-9].*', '%Y', 1]
         ]
 
         def _get_date_from_path_name(regexp: str,  date_format: str, array_max: int) -> Optional[datetime]:
@@ -334,15 +302,12 @@ class Cleaner:
         """
         # todo: break out of this loop
         if os.path.exists(destination):
-            basename = destination.name[:len(destination.name) - len(destination.suffix)]
             for increment in reversed(range(20)):  # 19 -> 0
-                old_path = f'{destination.parent}{os.path.sep}{basename}_{increment}{destination.suffix}'
-                new_path = f'{destination.parent}{os.path.sep}{basename}_{increment + 1}{destination.suffix}'
+                old_path = f'{destination.parent}{os.path.sep}{destination.stem}_{increment}{destination.suffix}'
+                new_path = f'{destination.parent}{os.path.sep}{destination.stem}_{increment + 1}{destination.suffix}'
                 if os.path.exists(old_path):
                     os.rename(old_path, new_path)
-                else:
-                    break
-            os.rename(destination, f'{destination.parent}{os.path.sep}{basename}_0{destination.suffix}')
+            os.rename(destination, f'{destination.parent}{os.path.sep}{destination.stem}_0{destination.suffix}')
 
     @classmethod
     def clear_caches(cls):
@@ -430,15 +395,12 @@ class ImageCleaner(Cleaner):
         :return:
         """
         if self.__class__ == other.__class__:
-            try:
-                if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
-                    return True
-                # Try the hard way
-                self.load_image_data()
-                other.load_image_data()
-                return self._image_data == other._image_data
-            except:
-                pass
+            if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
+                return True
+            # Try the hard way
+            self.load_image_data()
+            other.load_image_data()
+            return self._image_data == other._image_data
         return False
 
     def __ne__(self, other):
@@ -579,7 +541,7 @@ class ImageCleaner(Cleaner):
                 image.save(new_name, format("JPEG"), exif=exif_bytes)
                 # todo:  Another bug,   we loose path info on the converted file
                 if migrated_base:
-                    self.relocate_file(self.get_new_path(base=migrated_base), remove=remove, rollover=False)
+                    self.relocate_file(migrated_base, remove=remove, rollover=False)
                 elif remove:
                     original_name.unlink()
                 return ImageCleaner(Path(new_name), self.folder)
@@ -751,7 +713,7 @@ class FolderCleaner(Cleaner):
                     return True
         return False
 
-    @cached_property
+    @property
     def date(self) -> Optional[datetime]:
         if not self._date:
             if not (len(self.path.name) == 22 and self.path.name.find(' ') == -1):  # Get rid of garbage first
@@ -764,28 +726,29 @@ class FolderCleaner(Cleaner):
 
     def get_description_from_path(self, app_name) -> Optional[str]:
         """
-        - pictures/2021/10/11
-        - pictures/2014/2014/06/30
-        pictures/2004_04_17_Roxy5
-        pictures/2016-09-25 Murphys Point
-        pictures/2003_10_Sara
-        pictures/2016 - Camping
-        pictures/Alex's House
-        - pictures/2014/2014/06/30/20140630-063739/zCMlYzsaTqyElbmIFHvvLw
-        - pictures/2014/2014/06/30/20140630-063736
-        pictures/2003_04_06_TriptoFalls
-        - pictures/12-Aug-2014
+        All of these paths have September 27th, 1961 as the date.
+
+        pictures/1961/9/27
+        pictures/2014/1961/09/27
+        pictures/1961_9_27_Roxy5
+        pictures/1961-09-27 Murphys Point
+        pictures/1961_9_Sara
+        pictures/2961 - Camping
+        pictures/2014/2014/06/30/19610927-063739/zCMlYzsaTqyElbmIFHvvLw
+        pictures/2014/2014/06/30/19610927-063736
+        pictures/1961_09_27_TriptoFalls
+        pictures/27-Sep-1961
 
         :return:
         """
         parser_values = [
-            '^[0-9]{4}.[0-9]{2}.[0-9]{2}(.*)',
+            '^[0-9]{4}.[0-9]{1,2}.[0-9]{1,2}(.*)',
             '^[0-9]{2}.[a-zA-Z]{3}.[0-9]{4}(.*)',
-            '^[0-9]{4}.[0-9]{2}(.*)',
+            '^[0-9]{4}.[0-9]{1,2}(.*)',
             '^[0-9]{4}(.*)',
         ]
 
-        # We have a lot of they were generated by some other import
+        # We have a lot of paths that were generated by some other import
         if len(self.path.name) == 22 and self.path.name.find(' ') == -1:
             return None
         elif re.match('^[0-9]{8}-[0-9]{6}$', self.path.name):  # Pure Date

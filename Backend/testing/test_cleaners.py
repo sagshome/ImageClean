@@ -162,34 +162,6 @@ class ImageCleanerTests(Cleaners):
         self.jpg_obj = ImageCleaner(
             copy_file(self.my_location.joinpath('data').joinpath('jpeg_image.jpg'), self.input_folder), None)
 
-    @staticmethod
-    def set_date(original_file: Path, new_date: datetime):
-        """
-        Given a physical file,  move the file to the input directory
-        original_file:  The file to process
-        new_date: date_string to put into file
-        move_to_input: If set,  copy the file to this location.
-        :return: None
-        """
-        exif_dict = piexif.load(str(original_file))
-        if not new_date:
-            if piexif.ImageIFD.DateTime in exif_dict['0th']:
-                del (exif_dict['0th'][piexif.ImageIFD.DateTime])
-            if piexif.ExifIFD.DateTimeOriginal in exif_dict['Exif']:
-                del (exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal])
-            if piexif.ExifIFD.DateTimeDigitized in exif_dict['Exif']:
-                del (exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized])
-        else:
-            new_date = new_date.strftime("%Y:%m:%d %H:%M:%S")
-            exif_dict['0th'][piexif.ImageIFD.DateTime] = new_date
-            exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = new_date
-            exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
-
-        # Save changes
-        exif_bytes = piexif.dump(exif_dict)
-        piexif.insert(exif_bytes, str(original_file))
-        pass
-
     def test_date_no_date(self):
 
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
@@ -199,7 +171,7 @@ class ImageCleanerTests(Cleaners):
 
     def test_date_date(self):
         image_time = datetime.now() - timedelta(days=1)
-        self.set_date(self.jpg_obj.path, image_time)
+        set_date(self.jpg_obj.path, image_time)
         new_time = self.jpg_obj.get_date_from_image()
         self.assertEqual(new_time.year, image_time.year, 'Matching year')
         self.assertEqual(new_time.month, image_time.month, 'Matching month')
@@ -242,7 +214,7 @@ class ImageCleanerTests(Cleaners):
             copy_file(self.jpg_obj.path, self.jpg_obj.path.parent, new_name='new_name.jpg'), None)  # make a copy
 
         image_time = datetime.now()
-        self.set_date(clone_obj.path, image_time)
+        set_date(clone_obj.path, image_time)
         self.assertTrue(self.jpg_obj == clone_obj, 'Files are still the same, regardless of dates')
 
     def test_image_compare4(self):
@@ -257,8 +229,8 @@ class ImageCleanerTests(Cleaners):
         obj2 = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base), None)
 
         # test5 -> less than and greater than
-        self.set_date(obj1.path, image_time - timedelta(days=1))
-        self.set_date(obj2.path, image_time)
+        set_date(obj1.path, image_time - timedelta(days=1))
+        set_date(obj2.path, image_time)
 
         self.assertTrue(obj1 > obj2, "Older time stamps are >")  # ack
         self.assertTrue(obj2 < obj1, "Newer time stamps are <")  # ack
@@ -269,8 +241,8 @@ class ImageCleanerTests(Cleaners):
         with_date = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base), None)
 
         # test6 -> Null date values
-        self.set_date(no_date.path, None)
-        self.set_date(with_date.path, image_time)
+        set_date(no_date.path, None)
+        set_date(with_date.path, image_time)
 
         self.assertTrue(no_date < with_date)
         self.assertFalse(no_date > with_date)
@@ -288,18 +260,6 @@ class ImageCleanerTests(Cleaners):
     def test_small(self):
         self.assertFalse(self.jpg_obj.is_small)
         self.assertTrue(self.small_obj.is_small)
-
-    # def test_update_date(self):
-    #    image_time = datetime.now()
-    #    no_date = ImageCleaner(self.copy_file(self.jpg_obj.path, self.run_base, new_name='new_name.jpg'), None)
-    #    self.set_date(no_date.path, None)
-    #    self.assertIsNone(no_date.date)
-
-    #    date_in_name = ImageCleaner(self.copy_file(
-    #        self.jpg_obj.path, self.run_base, new_name=image_time.strftime("%Y%m%d-%H%M%S") + no_date.path.suffix),
-    #        None)
-    #    self.set_date(date_in_name.path, None)
-    #    self.assertIsNotNone(date_in_name.date)
 
     def test_registrations(self):
 
@@ -355,63 +315,6 @@ class ImageCleanerTests(Cleaners):
             new_obj.de_register()
             self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to remove non-'), 'Failed to log error')
 
-    def test_get_new_path(self):
-        """
-        This is a great deal of the logic with cleaners
-        :return:
-        """
-        image_time = datetime.now() - timedelta(days=1)
-        new_directory1 = FolderCleaner(self.output_folder.joinpath('Directory1'), parent=self.root_folder)
-        new_directory2 = FolderCleaner(new_directory1.path.joinpath('Directory2'), parent=new_directory1)
-        os.mkdir(new_directory1.path)
-        os.mkdir(new_directory2.path)
-        new_file = copy_file(self.jpg_obj.path, self.run_base)
-        self.set_date(new_file, image_time)
-        new_obj = ImageCleaner(new_file, self.root_folder)
-
-        # test1
-        self.assertIsNone(new_obj.get_new_path(None), "Without a base,  we have no path")
-
-        # test2
-        output = self.output_folder.\
-            joinpath(str(image_time.year)).\
-            joinpath(str(image_time.month)).\
-            joinpath(str(image_time.day))
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=[]), output, 'Date Based path test')
-
-        # test3
-        new_file = copy_file(new_file, new_directory1.path, cleanup=True)
-        new_obj = ImageCleaner(new_file, new_directory1)
-        output = self.output_folder.joinpath(str(image_time.year)).joinpath('Directory1')
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=[]), output, 'Desc path test')
-
-        # test4
-        new_file = copy_file(new_file, new_directory2.path, cleanup=True)
-        new_obj = ImageCleaner(new_file, new_directory2)
-        output = self.output_folder.joinpath(str(image_time.year)).joinpath('Directory1').joinpath('Directory2')
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=[]), output, 'Desc path test')
-
-        # test5
-        self.set_date(new_file, None)
-        new_obj = ImageCleaner(new_file, new_directory2)
-        output = self.output_folder.joinpath('Directory1').joinpath('Directory2')
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=[]), output, 'Desc path test')
-
-        # test6
-        output = self.output_folder.joinpath('Directory1')
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=['Directory2', ]), output,
-                         'Desc path test')
-
-        output = self.output_folder.joinpath('Directory2')
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=['Directory1', ]), output,
-                         'Desc path test')
-
-        # test7
-        new_file = copy_file(new_file, self.root_folder.path, cleanup=True)
-        new_obj = ImageCleaner(new_file, self.root_folder)
-        output = self.output_folder
-        self.assertEqual(new_obj.get_new_path(self.output_folder, invalid_parents=[]), output, 'Desc no date/desc test')
-
     def test_relocate_1(self):
 
         self.jpg_obj.relocate_file(None)
@@ -455,7 +358,7 @@ class ImageCleanerTests(Cleaners):
         image = ImageCleaner(Path('/a/b/c.jpg'), None)
         self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
-        test_date = datetime(year=2022, month=12, day=25, hour=23, minute=59, second=59)
+        test_date = datetime(year=2022, month=12, day=25)
         image = ImageCleaner(Path('/a/b/20221225_235959.jpg'), None)
         self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
         image = ImageCleaner(Path('/a/b/a20221225_235959.jpg'), None)
@@ -633,7 +536,7 @@ class FolderTests(Cleaners):
         super(FolderTests, self).setUp()
         self.custom_dir1 = FolderCleaner(self.input_folder.joinpath('custom1'))
         self.custom_dir2 = FolderCleaner(self.input_folder.joinpath('custom2'))
-        self.date_dir1 = FolderCleaner(self.input_folder.joinpath('2022').joinpath('12').joinpath('24'))
+        self.date_dir1 = FolderCleaner(self.input_folder.joinpath(DIR_SPEC))
         self.date_dir2 = FolderCleaner(self.input_folder.joinpath('2022').joinpath('12').joinpath('25'))
         self.no_date = FolderCleaner(self.input_folder)
 
@@ -641,6 +544,20 @@ class FolderTests(Cleaners):
         os.makedirs(self.custom_dir2.path, exist_ok=False)
         os.makedirs(self.date_dir1.path, exist_ok=False)
         os.makedirs(self.date_dir2.path, exist_ok=False)
+
+        self.folder_data = [
+            # folder path,  date value, description
+            ['1961/9/27', DATE_SPEC, None],
+            ['2014/1961/09/27', DATE_SPEC, None],
+            ['1961_9_27_Roxy5', DATE_SPEC, 'Roxy5'],
+            ["1961-09-27 Murphy's Point", DATE_SPEC, "Murphy's Point"],
+            ['1961_9_Sara', datetime(1961, 9, 1), 'Sara'],
+            ['1961 - Camping', datetime(1961, 1, 1), 'Camping'],
+            ['2014/2014/06/30/19610927-063739/zCMlYzsaTqyElbmIFHvvLw', None, None],
+            ['2014/2014/06/30/19610927-063736', DATE_SPEC, None],
+            ['1961_09_27_TriptoFalls', None, None],  # fails,  22 chars and no spaces - bogus clause
+            ['27-Sep-1961', DATE_SPEC, None],
+        ]
 
     def test_operators(self):
         self.assertTrue(self.custom_dir1 == self.custom_dir2)
@@ -663,21 +580,20 @@ class FolderTests(Cleaners):
         self.assertTrue(self.date_dir1 > self.no_date)
         self.assertFalse(self.date_dir1 < self.no_date)
 
-
-    def test_folder_date(self):
-        self.assertIsNone(self.custom_dir1.date)
-        self.assertEqual(self.date_dir1.date, datetime(2022, 12, 24))
-        child = FolderCleaner(self.date_dir1.path.joinpath('Custom3'), parent=self.date_dir1)
-        child2 = FolderCleaner(child.path.joinpath('Custom4'), parent=child)
-        child3 = FolderCleaner(child2.path.joinpath('Custom5'), parent=child2)
-        self.assertEqual(self.date_dir1.date, child3.date)
+    def test_folder_data(self):
+        for path, date_spec, description in self.folder_data:
+            file = create_file(self.input_folder.joinpath(path).joinpath('fake.file'))
+            folder = FolderCleaner(file.parent)
+            test_date = folder.date
+            self.assertEqual(folder.date, date_spec, f'Testing folder date {date_spec} on {file}')
+            self.assertEqual(folder.description, description, f'Testing folder description on {file}')
 
     def test_size(self):
         input_obj = FolderCleaner(self.input_folder, None)
-        self.assertEqual(input_obj.size, 3, 'Initial Folder size test')
+        self.assertEqual(input_obj.size, 4, 'Initial Folder size test')
 
         self.assertTrue(input_obj.is_small, 'Less then 10 is  small')
-        for x in range(6):
+        for x in range(5):
             create_file(self.input_folder.joinpath(f"junk_{x}.jpg"), None)
         self.assertTrue(input_obj.is_small, 'Less then 10 is  small')
         create_file(self.input_folder.joinpath('one_little_mint.jpg'), None)

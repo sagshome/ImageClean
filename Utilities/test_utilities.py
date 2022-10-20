@@ -10,7 +10,7 @@ DATE_SPEC = datetime(1961, 9, 27)
 DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
 
 
-def copy_file(in_file: Path, out_path: Path, cleanup: bool = False, new_name: str = None) -> Path:
+def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
 
     if not out_path.exists():
         makedirs(out_path)
@@ -19,8 +19,6 @@ def copy_file(in_file: Path, out_path: Path, cleanup: bool = False, new_name: st
     new_path = out_path.joinpath(new_name)
     copyfile(str(in_file), new_path)
 
-    if cleanup:
-        in_file.unlink()
     return new_path
 
 
@@ -50,12 +48,15 @@ def create_file(name: Path, data: str = None, empty: bool = False) -> Path:
 def create_image_file(path: Path, date: Union[datetime, None], text: str = None, small: bool = False):
     """
     Use this to create an Image File  (It will respect the type..., use text to make unique)
-    :param path:  -> what / where to save the image to
+    :param path:  -> what / where to save the image to - if no name is provided,  it will be file.jpg
     :param date: -> the datetime to set,  None has not date date
     :param text: -> Data to write into the image,  default is path.name
     :param small:  Set the image size to 360x360
     :return:
     """
+
+    if not path.suffix:
+        path = path.joinpath('file.jpg')
 
     if not path.parent.exists():
         makedirs(path.parent)
@@ -71,6 +72,7 @@ def create_image_file(path: Path, date: Union[datetime, None], text: str = None,
         exif_dict['0th'] = {}
         exif_dict['0th'][ImageIFD.DateTime] = date.strftime("%Y:%m:%d %H:%M:%S")
     canvas.save(path, exif=dump(exif_dict))
+    return path
 
 
 def set_date(original_file: Path, new_date: Union[datetime, None]):
