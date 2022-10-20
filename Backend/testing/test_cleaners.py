@@ -1,10 +1,17 @@
+# pylint Overrides
+# pylint: disable=line-too-long
+# pylint: disable=missing-class-docstring
+# pylint: disable=missing-function-docstring
+# pylint: disable=too-many-public-methods
+
 """
 Test cases in this file process actual images,  I was going to MOCK everything but in the end I opted to exercise the
 imaging frameworks.   There files are used,  a standard jpg,  a thumbnail and a HEIC file
 
 """
+
+
 import os
-import piexif
 import sys
 import tempfile
 
@@ -12,16 +19,17 @@ import unittest
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest import TestCase
 from unittest.mock import patch
+from unittest import TestCase
 
-from Backend.Cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
+from Backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
     file_cleaner, duplicate_hash, root_path_list, PICTURE_FILES, MOVIE_FILES
-from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, \
+from Utilities.test_utilities import copy_file, create_file, set_date, \
     DATE_SPEC, DIR_SPEC
 
 sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack, venv doesn't work real well
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+
 
 
 class CleanerUtilsTest(unittest.TestCase):
@@ -52,6 +60,7 @@ class CleanersInitTest(TestCase):
     """
 
     def test_null_values(self):
+        # pylint: disable=protected-access
         new_obj = Cleaner(Path('/fake_parent/fake_dir/fake.file'), None)
         self.assertEqual(new_obj.path, Path('/fake_parent/fake_dir/fake.file'))
         self.assertIsNone(new_obj.folder)
@@ -116,7 +125,7 @@ class CleanerTests(Cleaners):
         self.assertTrue(self.file1.is_valid, 'Valid file is not valid')
         fake = Cleaner(Path('/a/b.c'), None)
         self.assertFalse(fake.is_valid, 'Testing a fake file')
-        empty_file = create_file(self.input_folder.joinpath('fake'),  empty=True)
+        empty_file = create_file(self.input_folder.joinpath('fake'), empty=True)
         empty = Cleaner(Path(empty_file), None)
         self.assertFalse(empty.is_valid, 'Testing an empty file')
         folder = Cleaner(self.input_folder, None)
@@ -146,6 +155,7 @@ class CleanerTests(Cleaners):
         self.assertNotEqual(expected_key, self.file1.registry_key)
 
 
+# pylint disable=too-many-public-methods
 class ImageCleanerTests(Cleaners):
 
     def setUp(self):
@@ -163,7 +173,6 @@ class ImageCleanerTests(Cleaners):
             copy_file(self.my_location.joinpath('data').joinpath('jpeg_image.jpg'), self.input_folder), None)
 
     def test_date_no_date(self):
-
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             date_value = self.jpg_obj.get_date_from_image()
             self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Could not find a date in {self.jpg_obj.path}')
@@ -189,6 +198,7 @@ class ImageCleanerTests(Cleaners):
             self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Failed to load {invalid_image.path} - File not Found')
 
     def test_image_data(self):
+        # pylint: disable=protected-access
         self.assertListEqual(self.jpg_obj._image_data, [], "Image data should be empty")
         _ = self.jpg_obj.image_data
         self.assertNotEqual(self.jpg_obj._image_data, [], "Image data has been cached")
@@ -218,10 +228,9 @@ class ImageCleanerTests(Cleaners):
         self.assertTrue(self.jpg_obj == clone_obj, 'Files are still the same, regardless of dates')
 
     def test_image_compare4(self):
-
         # test4 -> make sure everything is not ==
         self.assertFalse(self.jpg_obj == self.small_obj, 'Files are different')
-        self.assertTrue(self.jpg_obj != self.small_obj), 'Test != operator'
+        self.assertTrue(self.jpg_obj != self.small_obj, 'Test != operator')
 
     def test_image_compare5(self):
         image_time = datetime.now()
@@ -262,7 +271,6 @@ class ImageCleanerTests(Cleaners):
         self.assertTrue(self.small_obj.is_small)
 
     def test_registrations(self):
-
         # Test 1 -> simple registration and de-registration
         self.jpg_obj.clear_caches()
 
@@ -316,7 +324,6 @@ class ImageCleanerTests(Cleaners):
             self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to remove non-'), 'Failed to log error')
 
     def test_relocate_1(self):
-
         self.jpg_obj.relocate_file(None)
 
         self.jpg_obj.relocate_file(self.output_folder, register=True)
@@ -327,7 +334,6 @@ class ImageCleanerTests(Cleaners):
         os.unlink(self.output_folder.joinpath(self.jpg_obj.path))
 
     def test_relocate_2(self):
-
         self.jpg_obj.relocate_file(self.output_folder, remove=True)
         self.assertFalse(self.jpg_obj.path.exists(), 'Test erase')
         self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists, 'Copy worked')
@@ -351,10 +357,9 @@ class ImageCleanerTests(Cleaners):
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             new_image.relocate_file(self.output_folder, rollover=True, remove=True)
             error_value = f'DEBUG:Cleaner:{new_image.path}'
-            self.assertTrue(logs.output[len(logs.output)-1].startswith(error_value), 'R/O remove')
+            self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'R/O remove')
 
     def test_get_data_from_path_name(self):
-
         image = ImageCleaner(Path('/a/b/c.jpg'), None)
         self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
@@ -363,15 +368,15 @@ class ImageCleanerTests(Cleaners):
         self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
         image = ImageCleaner(Path('/a/b/a20221225_235959.jpg'), None)
         self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        #image = ImageCleaner(Path('/a/b/20221225_235959z.jpg'), None)
-        #self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
+        # image = ImageCleaner(Path('/a/b/20221225_235959z.jpg'), None)
+        # self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
         image = ImageCleaner(Path('/a/b/20221225-235959.jpg'), None)
         self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
         image = ImageCleaner(Path('/a/b/a20221225-235959.jpg'), None)
         self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        #image = ImageCleaner(Path('/a/b/20221225-235959z.jpg'), None)
-        #self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
+        # image = ImageCleaner(Path('/a/b/20221225-235959z.jpg'), None)
+        # self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
         test_date = datetime(year=2022, month=12, day=25)
         image = ImageCleaner(Path('/a/b/2022:12:25.jpg'), None)
@@ -398,7 +403,6 @@ class ImageCleanerTests(Cleaners):
         self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
     def test_get_data_from_folder_name(self):
-
         image = ImageCleaner(Path('/a/b/c.jpg'), None)
         self.assertIsNone(image.get_date_from_folder_names(), 'Image name has no date values')
 
@@ -472,7 +476,7 @@ class ImageCleanerTests(Cleaners):
         with self.assertLogs('Cleaner', level='ERROR') as logs:
             new = self.heic_obj.convert(self.run_base, None, remove=False)
             error_value = f'ERROR:Cleaner:Conversion from HEIC is not supported on Windows'
-            self.assertTrue(logs.output[len(logs.output)-1].startswith(error_value), 'windows HEIC')
+            self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'windows HEIC')
             self.assertEqual(new, self.heic_obj)
 
     def test_non_image_open(self):
@@ -480,7 +484,7 @@ class ImageCleanerTests(Cleaners):
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             file1.open_image()
             error_value = f'DEBUG:Cleaner:open_image UnidentifiedImageError {file1.path}'
-            self.assertTrue(logs.output[len(logs.output)-1].startswith(error_value), 'non-image')
+            self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'non-image')
 
 
 class FileTests(Cleaners):
@@ -489,7 +493,6 @@ class FileTests(Cleaners):
     """
 
     def test_compare(self):
-
         file1 = FileCleaner(create_file(self.input_folder.joinpath('a.file'), data='File Contents1'), None)
         file2 = FileCleaner(create_file(self.input_folder.joinpath('b.file'), data='File Contents2'), None)
         file3 = FileCleaner(create_file(self.input_folder.joinpath('c.file'), data='File Contents1'), None)
@@ -502,7 +505,7 @@ class FileTests(Cleaners):
         self.assertFalse(file1.is_small)
 
     def test_dates(self):
-
+        # pylint: disable=protected-access
         cur_time = datetime.now().replace(microsecond=0)
         old_time = cur_time - timedelta(days=2)
         older_time = old_time.timestamp()
@@ -584,7 +587,6 @@ class FolderTests(Cleaners):
         for path, date_spec, description in self.folder_data:
             file = create_file(self.input_folder.joinpath(path).joinpath('fake.file'))
             folder = FolderCleaner(file.parent)
-            test_date = folder.date
             self.assertEqual(folder.date, date_spec, f'Testing folder date {date_spec} on {file}')
             self.assertEqual(folder.description, description, f'Testing folder description on {file}')
 
@@ -593,8 +595,8 @@ class FolderTests(Cleaners):
         self.assertEqual(input_obj.size, 4, 'Initial Folder size test')
 
         self.assertTrue(input_obj.is_small, 'Less then 10 is  small')
-        for x in range(5):
-            create_file(self.input_folder.joinpath(f"junk_{x}.jpg"), None)
+        for junk_i in range(5):
+            create_file(self.input_folder.joinpath(f"junk_{junk_i}.jpg"), None)
         self.assertTrue(input_obj.is_small, 'Less then 10 is  small')
         create_file(self.input_folder.joinpath('one_little_mint.jpg'), None)
         self.assertFalse(input_obj.is_small, 'Less then 10 is  small')

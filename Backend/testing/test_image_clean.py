@@ -1,26 +1,25 @@
+"""
+Test Cases for the Image Clean classes
+"""
+# pylint: disable=too-many-lines
+# pylint: disable=line-too-long
+# pylint: disable=missing-class-docstring
+# pylint: disable=missing-function-docstring
+
 import os
 import stat
-import time
-
-import piexif
-import platform
 import sys
 import tempfile
 import unittest
 
 from datetime import datetime, timedelta
-from freezegun import freeze_time
 from pathlib import Path
-from PIL import Image, ImageDraw
-from shutil import copyfile
-from typing import Union
-from unittest import mock
 from unittest.mock import patch
 
+from freezegun import freeze_time
 import pytest
 
-from Backend.Cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner
-from Backend.ImageClean import NEW_FILE, EXACT_FILE, LESSER_FILE, GREATER_FILE, SMALL_FILE, WARNING_FOLDER_SIZE
+from Backend.cleaner import Cleaner
 from Backend.ImageClean import ImageClean
 from Utilities.test_utilities import create_image_file, count_files, set_date, copy_file, DATE_SPEC, DIR_SPEC
 
@@ -36,6 +35,7 @@ class ActualScenarioTest(unittest.TestCase):
 
 
     """
+    # pylint: disable=too-many-public-methods, too-many-instance-attributes
     def tearDown(self):
         self.temp_base.cleanup()
         Cleaner.clear_caches()
@@ -166,7 +166,7 @@ class ActualScenarioTest(unittest.TestCase):
             self.input_folder.joinpath(DIR_SPEC).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg').exists(), f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg')
         self.assertTrue(
             self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('1').joinpath('1').joinpath(
-                'struct_date_custom.jpg').exists(),  'struct_date_custom.jpg')
+                'struct_date_custom.jpg').exists(), 'struct_date_custom.jpg')
 
     @patch('pathlib.Path.home')
     def test_restart_no_changes3(self, home):
@@ -392,8 +392,6 @@ class ActualScenarioTest(unittest.TestCase):
 
     @patch('pathlib.Path.home')
     def test_mov_files_keep(self, home):
-        """
-        """
 
         home.return_value = Path(self.temp_base.name)
         no_date_mov = copy_file(self.jpg_file, self.input_folder, new_name='no_date.mov')
@@ -415,8 +413,6 @@ class ActualScenarioTest(unittest.TestCase):
 
     @patch('pathlib.Path.home')
     def test_mov_files_no_keep(self, home):
-        """
-        """
 
         home.return_value = Path(self.temp_base.name)
         no_date_mov = copy_file(self.jpg_file, self.input_folder, new_name='no_date.mov')
@@ -964,18 +960,18 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertFalse(cleaner.no_date_path.joinpath('nodate.txt').exists())
         self.assertFalse(self.output_folder.joinpath(DIR_SPEC).joinpath('internal_date.txt').exists())
         self.assertFalse(self.output_folder.joinpath(DIR_SPEC).
-                        joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}.txt').exists())
+                         joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}.txt').exists())
         self.assertFalse(self.output_folder.joinpath(DIR_SPEC).
-                        joinpath('struct_date.txt').exists())
+                         joinpath('struct_date.txt').exists())
         self.assertFalse(cleaner.no_date_path.
-                        joinpath(self.other_folder.name).joinpath('no_date_custom.txt').exists())
+                         joinpath(self.other_folder.name).joinpath('no_date_custom.txt').exists())
         self.assertFalse(self.output_folder.joinpath(str(DATE_SPEC.year)).
-                        joinpath(self.other_folder.name).joinpath('internal_date_custom.txt').exists())
+                         joinpath(self.other_folder.name).joinpath('internal_date_custom.txt').exists())
         self.assertFalse(self.output_folder.joinpath(str(DATE_SPEC.year)).
-                        joinpath(self.other_folder.name).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.txt')
-                        .exists())
+                         joinpath(self.other_folder.name).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.txt')
+                         .exists())
         self.assertFalse(self.output_folder.joinpath(str(DATE_SPEC.year)).
-                        joinpath(self.other_folder.name).joinpath('struct_date_custom.txt').exists())
+                         joinpath(self.other_folder.name).joinpath('struct_date_custom.txt').exists())
         self.assertEqual(count_files(self.output_folder), 0)
         self.assertEqual(count_files(self.input_folder), 8)
 
@@ -998,115 +994,116 @@ class InitTest(unittest.TestCase):
         :return:
         """
         home.return_value = Path(self.tempdir.name)
-        self.app = ImageClean('test_app')
-        self.assertEqual(self.app.app_name, 'test_app', "Failed to set the app name")
-        self.assertIsNotNone(self.app.conf_file, f'Config file {self.app.conf_file} is not set')
-        self.assertEqual(self.app.input_folder, Path.home())
-        self.assertEqual(self.app.input_folder, self.app.output_folder)
-        self.assertTrue(self.app.verbose, "Verbose is not True")
-        self.assertTrue(self.app.do_convert, "Conversion are not True")
-        self.assertFalse(self.app.recreate, "Recreate is not false")
-        self.assertTrue(self.app.do_convert)
-        self.assertFalse(self.app.recreate)
-        self.assertFalse(self.app.force_keep)
-        self.assertFalse(self.app.keep_duplicates)
-        self.assertFalse(self.app.keep_movie_clips)
-        self.assertFalse(self.app.process_all_files)
-        self.assertFalse(self.app.keep_converted_files)
-        self.assertTrue(self.app.keep_original_files, "Keep original default is not True")
-        self.assertListEqual(self.app.ignore_folders, [], "Ignore folders list is not empty")
-        self.assertListEqual(self.app.bad_parents, [], "Name ignore list is not empty")
-        self.assertEqual(self.app.progress, 0, "Progress has not been initialized")
-        self.app.stop()
+        app = ImageClean('test_app')
+        self.assertEqual(app.app_name, 'test_app', "Failed to set the app name")
+        self.assertIsNotNone(app.conf_file, f'Config file {app.conf_file} is not set')
+        self.assertEqual(app.input_folder, Path.home())
+        self.assertEqual(app.input_folder, app.output_folder)
+        self.assertTrue(app.verbose, "Verbose is not True")
+        self.assertTrue(app.do_convert, "Conversion are not True")
+        self.assertFalse(app.recreate, "Recreate is not false")
+        self.assertTrue(app.do_convert)
+        self.assertFalse(app.recreate)
+        self.assertFalse(app.force_keep)
+        self.assertFalse(app.keep_duplicates)
+        self.assertFalse(app.keep_movie_clips)
+        self.assertFalse(app.process_all_files)
+        self.assertFalse(app.keep_converted_files)
+        self.assertTrue(app.keep_original_files, "Keep original default is not True")
+        self.assertListEqual(app.ignore_folders, [], "Ignore folders list is not empty")
+        self.assertListEqual(app.bad_parents, [], "Name ignore list is not empty")
+        self.assertEqual(app.progress, 0, "Progress has not been initialized")
+        app.stop()
 
     @patch('pathlib.Path.home')
     def test_run_path(self, home):
         home.return_value = Path(self.tempdir.name)
 
         expected_run_path = Path(Path.home().joinpath('.test_app_init_test'))
-        f = ImageClean('test_app_init_test')
-        f.verbose = False
+        app = ImageClean('test_app_init_test')
+        app.verbose = False
         self.assertTrue(expected_run_path.exists())
-        f.stop()
+        app.stop()
 
     @patch('pathlib.Path.home')
-    def test_save_and_restore(self, home):
+    def test_save_and_restore(self, home):   # pylint: disable=too-many-statements
+
         home.return_value = Path(self.tempdir.name)
 
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
-            self.app = ImageClean('test_app', restore=True)
+            app = ImageClean('test_app', restore=True)
             error_value = f'DEBUG:Cleaner:Restore attempt of'
             self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'Restore Fails')
             # default value
-            self.assertEqual(self.app.app_name, 'test_app', "Failed to set the app name")
-            self.assertIsNotNone(self.app.conf_file, f'Config file {self.app.conf_file} is not set')
-            self.assertEqual(self.app.input_folder, Path.home())
-            self.assertEqual(self.app.input_folder, self.app.output_folder)
-            self.assertTrue(self.app.verbose, "Verbose is not True")
-            self.assertTrue(self.app.do_convert, "Conversion are not True")
-            self.assertFalse(self.app.recreate, "Recreate is not false")
-            self.assertTrue(self.app.do_convert)
-            self.assertFalse(self.app.recreate)
-            self.assertFalse(self.app.keep_duplicates)
-            self.assertFalse(self.app.keep_movie_clips)
-            self.assertFalse(self.app.keep_converted_files)
-            self.assertTrue(self.app.keep_original_files, "Keep original default is not True")
-            self.assertListEqual(self.app.ignore_folders, [], "Ignore folders list is not empty")
-            self.assertListEqual(self.app.bad_parents, [], "Name ignore list is not empty")
+            self.assertEqual(app.app_name, 'test_app', "Failed to set the app name")
+            self.assertIsNotNone(app.conf_file, f'Config file {app.conf_file} is not set')
+            self.assertEqual(app.input_folder, Path.home())
+            self.assertEqual(app.input_folder, app.output_folder)
+            self.assertTrue(app.verbose, "Verbose is not True")
+            self.assertTrue(app.do_convert, "Conversion are not True")
+            self.assertFalse(app.recreate, "Recreate is not false")
+            self.assertTrue(app.do_convert)
+            self.assertFalse(app.recreate)
+            self.assertFalse(app.keep_duplicates)
+            self.assertFalse(app.keep_movie_clips)
+            self.assertFalse(app.keep_converted_files)
+            self.assertTrue(app.keep_original_files, "Keep original default is not True")
+            self.assertListEqual(app.ignore_folders, [], "Ignore folders list is not empty")
+            self.assertListEqual(app.bad_parents, [], "Name ignore list is not empty")
 
-            self.app.input_folder = Path('/input')
-            self.app.output_folder = Path('/output')
-            self.app.verbose = False
-            self.app.do_convert = False
-            self.app.set_recreate(True)
-            self.app.set_keep_original_files(False)
-            self.app.set_keep_duplicates(True)
-            self.app.set_keep_movie_clips(True)
-            self.app.set_keep_converted_files(True)
-            self.app.add_ignore_folder(Path('/tmp/a'))
-            self.app.add_ignore_folder(Path('/tmp/b'))
-            self.assertFalse(self.app.add_ignore_folder(Path('/tmp/b')))
-            self.app.add_bad_parents('homer')
-            self.app.add_bad_parents('marge')
-            self.assertFalse(self.app.add_bad_parents('marge'))
+            app.input_folder = Path('/input')
+            app.output_folder = Path('/output')
+            app.verbose = False
+            app.do_convert = False
+            app.set_recreate(True)
+            app.set_keep_original_files(False)
+            app.set_keep_duplicates(True)
+            app.set_keep_movie_clips(True)
+            app.set_keep_converted_files(True)
+            app.add_ignore_folder(Path('/tmp/a'))
+            app.add_ignore_folder(Path('/tmp/b'))
+            self.assertFalse(app.add_ignore_folder(Path('/tmp/b')))
+            app.add_bad_parents('homer')
+            app.add_bad_parents('marge')
+            self.assertFalse(app.add_bad_parents('marge'))
 
-            self.app.save_config()
-            self.app.stop()
+            app.save_config()
+            app.stop()
 
-        self.app = ImageClean('test_app', restore=True)
-        self.app.verbose = False
-        self.assertEqual(self.app.input_folder, Path('/input'))
-        self.assertEqual(self.app.output_folder, Path('/output'))
-        self.assertFalse(self.app.verbose, "Verbose is not True")
-        self.assertFalse(self.app.do_convert, "Conversion are not True")
-        self.assertTrue(self.app.recreate, "Recreate is not false")
-        self.assertFalse(self.app.do_convert)
-        self.assertTrue(self.app.recreate)
-        self.assertTrue(self.app.keep_duplicates)
-        self.assertTrue(self.app.keep_movie_clips)
-        self.assertTrue(self.app.keep_converted_files)
-        self.assertFalse(self.app.keep_original_files, "Keep original default is not True")
-        self.assertListEqual(self.app.ignore_folders, [Path('/tmp/a'), Path('/tmp/b')], "Ignore folders list")
-        self.assertListEqual(self.app.bad_parents, ['homer', 'marge'], "Name ignore list")
-        self.app.stop()
+        app = ImageClean('test_app', restore=True)
+        app.verbose = False
+        self.assertEqual(app.input_folder, Path('/input'))
+        self.assertEqual(app.output_folder, Path('/output'))
+        self.assertFalse(app.verbose, "Verbose is not True")
+        self.assertFalse(app.do_convert, "Conversion are not True")
+        self.assertTrue(app.recreate, "Recreate is not false")
+        self.assertFalse(app.do_convert)
+        self.assertTrue(app.recreate)
+        self.assertTrue(app.keep_duplicates)
+        self.assertTrue(app.keep_movie_clips)
+        self.assertTrue(app.keep_converted_files)
+        self.assertFalse(app.keep_original_files, "Keep original default is not True")
+        self.assertListEqual(app.ignore_folders, [Path('/tmp/a'), Path('/tmp/b')], "Ignore folders list")
+        self.assertListEqual(app.bad_parents, ['homer', 'marge'], "Name ignore list")
+        app.stop()
 
     @patch('pathlib.Path.home')
     def test_paranoid(self, home):
         home.return_value = Path(self.tempdir.name)
-        self.app = ImageClean('test_app', restore=True)
+        app = ImageClean('test_app', restore=True)
 
-        self.app.set_paranoid(True)
-        self.assertTrue(self.app.keep_duplicates)
-        self.assertTrue(self.app.keep_movie_clips)
-        self.assertTrue(self.app.keep_converted_files)
-        self.assertTrue(self.app.keep_original_files)
+        app.set_paranoid(True)
+        self.assertTrue(app.keep_duplicates)
+        self.assertTrue(app.keep_movie_clips)
+        self.assertTrue(app.keep_converted_files)
+        self.assertTrue(app.keep_original_files)
 
-        self.app.set_paranoid(False)
-        self.assertFalse(self.app.keep_duplicates)
-        self.assertFalse(self.app.keep_movie_clips)
-        self.assertFalse(self.app.keep_converted_files)
-        self.assertFalse(self.app.keep_original_files)
-        self.app.stop()
+        app.set_paranoid(False)
+        self.assertFalse(app.keep_duplicates)
+        self.assertFalse(app.keep_movie_clips)
+        self.assertFalse(app.keep_converted_files)
+        self.assertFalse(app.keep_original_files)
+        app.stop()
 
     @patch('pathlib.Path.home')
     def test_prepare(self, home):
@@ -1117,51 +1114,51 @@ class InitTest(unittest.TestCase):
         os.mkdir(output_folder)
         os.mkdir(input_folder)
 
-        self.app = ImageClean('test_app')
-        self.app.output_folder = output_folder
-        self.app.input_folder = input_folder
-        self.app.verbose = False
+        app = ImageClean('test_app')
+        app.output_folder = output_folder
+        app.input_folder = input_folder
+        app.verbose = False
 
         os.chmod(output_folder, mode=stat.S_IREAD)  # set to R/O
         with pytest.raises(AssertionError):  # Must assert with R/O output folder
-            self.app.run()
+            app.run()
 
         os.chmod(output_folder, mode=stat.S_IRWXU)  # Rest output
         os.chmod(input_folder, mode=stat.S_IREAD)  # Set input to R/O
 
-        self.app.run()
-        self.assertTrue(self.app.force_keep, 'Force Keep is set')
-        self.assertEqual(len(self.app.ignore_folders), 4)
-        self.assertEqual(len(self.app.bad_parents), 5)
+        app.run()
+        self.assertTrue(app.force_keep, 'Force Keep is set')
+        self.assertEqual(len(app.ignore_folders), 4)
+        self.assertEqual(len(app.bad_parents), 5)
 
-        self.app.input_folder = self.app.output_folder
-        self.app.set_recreate(True)
+        app.input_folder = app.output_folder
+        app.set_recreate(True)
         with pytest.raises(AssertionError):  # Must assert if trying to recreate the input folder
-            self.app.run()
+            app.run()
 
-        self.app.set_recreate(False)
-        self.app.run()
-        self.assertTrue(self.app.in_place, 'In place is not set')
-        self.assertIsNone(self.app.duplicate_path)
-        self.assertIsNone(self.app.migrated_path)
-        self.assertIsNone(self.app.image_movies_path)
-        self.assertIsNotNone(self.app.small_path)
-        self.assertIsNotNone(self.app.no_date_path)
+        app.set_recreate(False)
+        app.run()
+        self.assertTrue(app.in_place, 'In place is not set')
+        self.assertIsNone(app.duplicate_path)
+        self.assertIsNone(app.migrated_path)
+        self.assertIsNone(app.image_movies_path)
+        self.assertIsNotNone(app.small_path)
+        self.assertIsNotNone(app.no_date_path)
 
-        self.app.set_keep_movie_clips(True)
-        self.app.set_keep_duplicates(True)
-        self.app.set_keep_converted_files(True)
-        self.app.run()
-        self.assertIsNotNone(self.app.duplicate_path)
-        self.assertIsNotNone(self.app.migrated_path)
-        self.assertIsNotNone(self.app.image_movies_path)
+        app.set_keep_movie_clips(True)
+        app.set_keep_duplicates(True)
+        app.set_keep_converted_files(True)
+        app.run()
+        self.assertIsNotNone(app.duplicate_path)
+        self.assertIsNotNone(app.migrated_path)
+        self.assertIsNotNone(app.image_movies_path)
 
         # Auto Cleanup in action
-        self.assertFalse(self.app.duplicate_path.exists(), 'Duplicate path does not exist')
-        self.assertFalse(self.app.migrated_path.exists(), 'Migrate path does not exist')
-        self.assertFalse(self.app.image_movies_path.exists(), 'Movie path does not exist')
-        self.assertFalse(self.app.no_date_path.exists(), 'No_Date path does not exist')
-        self.assertFalse(self.app.small_path.exists(), 'Small path does not exist')
+        self.assertFalse(app.duplicate_path.exists(), 'Duplicate path does not exist')
+        self.assertFalse(app.migrated_path.exists(), 'Migrate path does not exist')
+        self.assertFalse(app.image_movies_path.exists(), 'Movie path does not exist')
+        self.assertFalse(app.no_date_path.exists(), 'No_Date path does not exist')
+        self.assertFalse(app.small_path.exists(), 'Small path does not exist')
 
     @freeze_time("1961-09-27 19:21:34")
     @patch('pathlib.Path.home')
@@ -1173,20 +1170,20 @@ class InitTest(unittest.TestCase):
         os.mkdir(output_folder)
         os.mkdir(input_folder)
 
-        self.app = ImageClean('test_app')
-        self.app.output_folder = output_folder
-        self.app.input_folder = input_folder
-        self.app.set_recreate(True)
-        self.app.verbose = False
+        app = ImageClean('test_app')
+        app.output_folder = output_folder
+        app.input_folder = input_folder
+        app.set_recreate(True)
+        app.verbose = False
 
         rolled_over = Path(f'{output_folder}_1961-09-27-19-21-34')
         self.assertFalse(rolled_over.exists())
 
-        self.app.run()
+        app.run()
         self.assertTrue(rolled_over.exists())
 
 
-class EdgeCaseTest(unittest.TestCase):
+class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attributes
     """
     These are test cases not covered in Actual Scenarios or Initialization
     """
@@ -1214,7 +1211,7 @@ class EdgeCaseTest(unittest.TestCase):
         self.jpg_file = self.my_location.joinpath('data').joinpath('jpeg_image.jpg')
 
     @patch('pathlib.Path.home')
-    def test_RO_input_forces_force_ro(self, home):
+    def test_read_only_input_forces_force_ro(self, home):
         home.return_value = Path(self.temp_base.name)
         orig = copy_file(self.jpg_file, self.input_folder)
         os.chmod(self.input_folder, mode=(stat.S_IREAD | stat.S_IEXEC))  # Set input to R/O
@@ -1243,8 +1240,8 @@ class EdgeCaseTest(unittest.TestCase):
         home.return_value = Path(self.temp_base.name)
 
         name = self.input_folder.joinpath('text.jpg')
-        f = open(name, 'w+')
-        f.close()  # Empty File
+        my_file = open(name, 'w+')
+        my_file.close()  # Empty File
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
         cleaner.run()

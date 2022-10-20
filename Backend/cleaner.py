@@ -6,24 +6,24 @@ This is a base class/classes for providing a standard set of attribute on Files/
 -
 
 """
+# pylint: disable=line-too-long
+
 import logging
 import os
 import platform
-import random
 import re
-
-import piexif
 
 from datetime import datetime
 from filecmp import cmp
 from functools import cached_property
 from pathlib import Path
-from PIL import Image, UnidentifiedImageError
 from shutil import copyfile
-from tempfile import TemporaryDirectory
 from typing import List, Dict, Optional, TypeVar, Union
+from PIL import Image, UnidentifiedImageError
 
-logger = logging.getLogger('Cleaner')
+import piexif
+
+logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
 
 
 IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
@@ -46,6 +46,12 @@ MOVIE_FILES = ['.mov', '.avi', '.mp4']
 
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
+    """
+    shortcut for making Cleaner Objects
+    :param file:
+    :param folder:
+    :return:
+    """
     if file.is_dir():
         key = str(file)
         if key not in folders:
@@ -53,17 +59,13 @@ def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageC
         return folders[key]
     if file.suffix.lower() in PICTURE_FILES or file.suffix.lower() in MOVIE_FILES:
         return ImageCleaner(file, folder)
-    else:
-        return FileCleaner(file, folder)
+    return FileCleaner(file, folder)
 
 
 class Cleaner:
-
-    os.environ.get("HOME")
     """
     A class to encapsulate the Path object that is going to be cleaned
     """
-
     def __init__(self, path_entry: Path, folder: FileCT = None):
 
         self.path = path_entry
@@ -84,15 +86,30 @@ class Cleaner:
     def __ne__(self, other) -> bool:
         return not self == other
 
-    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:
+    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:  # pylint: disable=unused-argument
+        """
+        Stub for converting,  only one type now but who knows
+        :param work_dir:
+        :param migrated_base:
+        :param remove:
+        :return:
+        """
         return self  # If required and successful return new Cleaner subclass object / vs self
 
     @staticmethod
-    def get_hash():  # Used for post processing
+    def get_hash():
+        """
+        Used to post process after imports
+        :return:
+        """
         return duplicate_hash  # pragma: no cover
 
     @property
     def date(self) -> Optional[datetime]:
+        """
+        the date of an object
+        :return:
+        """
         raise NotImplementedError
 
     @property
@@ -105,10 +122,18 @@ class Cleaner:
 
     @property
     def is_valid(self) -> bool:
+        """
+        A way to define and enhance a good file
+        :return:
+        """
         return self.path.is_file() and self.path.stat().st_size != 0
 
     @cached_property
     def registry_key(self) -> str:
+        """
+        Common key based on name,  cached for performance
+        :return:
+        """
         target = self.path.stem.upper()
         parsed = re.match('(.+)_[0-9]{1,2}$', target)
         if parsed:
@@ -116,8 +141,12 @@ class Cleaner:
         return target
 
     def register(self):
+        """
+        Register the existence of a file
+        :return:
+        """
         if self.is_registered(by_path=True, by_file=True):
-            logger.error(f'Trying to re_register {self.path})')
+            logger.error('Trying to re_register %s', self.path)
         else:
             key = self.registry_key
             if key not in duplicate_hash:
@@ -130,7 +159,7 @@ class Cleaner:
         """
         if not self.is_registered(by_path=True):
             if not silent:
-                logger.error(f'Trying to remove non-existent {self.path}) from duplicate_hash')
+                logger.error('Trying to remove non-existent %s from duplicate_hash', self.path)
         else:
             new_list = []
             for value in duplicate_hash[self.registry_key]:
@@ -143,6 +172,14 @@ class Cleaner:
 
     def is_registered(self, by_name: bool = True, by_path: bool = False, by_file: bool = False,
                       alternate_path: Path = None) -> bool:
+        """
+        Test for existing of a file
+        :param by_name:
+        :param by_path:
+        :param by_file:
+        :param alternate_path:
+        :return:
+        """
         value = self.get_registered(by_name=by_name, by_file=by_file, by_path=by_path, alternate_path=alternate_path)
         if value:
             return True
@@ -178,7 +215,6 @@ class Cleaner:
                 found_path = str(entry.path.parent) == str(new_path) if by_path else True
 
                 if by_file:
-                    logger.debug(f'Comparing {key} {entry.path} to {self.path}')
                     found_file = self == entry
                 else:
                     found_file = True
@@ -208,21 +244,21 @@ class Cleaner:
                 os.makedirs(new_path)
             new = new_path.joinpath(self.path.name)
             if self.path == new:
-                logger.debug(f'Will not copy to myself {new}')
+                logger.debug('Will not copy to myself %s', new)
                 return
             if new.exists() and rollover:
-                logger.debug(f'Rolling over {new}')
+                logger.debug('Rolling over %s', new)
                 self.rollover_name(new)
             else:  # todo: this is not true the 'and' does not make sense
-                logger.debug(f'Will not overwrite {new}')
+                logger.debug('Will not overwrite %s', new)
             copyfile(str(self.path), new)
 
         if remove:
             try:
                 self.de_register(silent=True)
                 os.unlink(self.path)
-            except OSError as e:
-                logger.debug(f'{self.path} could not be removed ({e}')
+            except OSError as error:
+                logger.debug('%s could not be removed (%s)', self.path, error)
 
         if register and new:
             self.path = new
@@ -242,7 +278,15 @@ class Cleaner:
             ['^([0-9]{4}).[^0-9].*', '%Y', 1]
         ]
 
-        def _get_date_from_path_name(regexp: str,  date_format: str, array_max: int) -> Optional[datetime]:
+        def _get_date_from_path_name(regexp: str, date_format: str, array_max: int) -> Optional[datetime]:
+            """
+            Actual working part.
+
+            :param regexp:
+            :param date_format:
+            :param array_max:
+            :return:
+            """
             re_parse = re.match(regexp, self.path.stem)
             if re_parse:
                 re_array = re_parse.groups()
@@ -250,7 +294,7 @@ class Cleaner:
                 try:
                     return datetime.strptime(date_string, date_format)
                 except ValueError:  # pragma: no cover
-                    logger.debug(f'Could not convert {date_string} of {self.path.name} to a date')
+                    logger.debug('Could not convert %s of %s to a date', date_string, self.path.name)
             return None
 
         for exp, fmt, index in parser_values:
@@ -260,7 +304,10 @@ class Cleaner:
         return None
 
     def get_date_from_folder_names(self) -> Optional[datetime]:
-        # Maybe not the best way but this need to work on the folder part if it is a file vs an actual folder
+        """
+        Maybe not the best way but this need to work on the folder part if it is a file vs an actual folder
+        :return:
+        """
         if self.__class__.__name__ != 'FolderCleaner':
             parent = str(self.path.parent.as_posix())
         else:
@@ -281,9 +328,8 @@ class Cleaner:
                 return
 
         # match on last folder and name  /a/b/c/d/e.f -> /d/e.f
-        parent_child = str(Path('/').joinpath(
-            self.path.parts[len(self.path.parts)-2]).joinpath(
-            self.path.name).as_posix())
+        parent_child = str(
+            Path('/').joinpath(self.path.parts[len(self.path.parts) - 2]).joinpath(self.path.name).as_posix())
 
         parse_tree = re.match('^/([1-9][0-9]{3}).*/[A-Za-z0-9].+$', parent_child)
         if parse_tree:
@@ -311,18 +357,31 @@ class Cleaner:
 
     @classmethod
     def clear_caches(cls):
+        """
+        Get rid of all that cheesy persistent class data
+        :return:
+        """
         while root_path_list:
             root_path_list.pop()
         duplicate_hash.clear()
 
     @classmethod
     def add_to_root_path(cls, some_path: Path):
+        """
+        Root path is used to limit scope of recursive searching
+        :param some_path:
+        :return:
+        """
         path = str(some_path)
         if path not in root_path_list:
             root_path_list.append(path)
 
     @classmethod
-    def get_root_path(cls):  # just for debugging
+    def _get_root_path(cls):
+        """
+        just for debugging and testing
+        :return:
+        """
         return root_path_list  # pragma: no cover
 
 
@@ -457,21 +516,33 @@ class ImageCleaner(Cleaner):
     # Ensure we have a date for the existing image
 
     def close_image(self):
+        """
+        Close image file
+        :return:
+        """
         if self._image:
             self._image.close()
         self._image = None
 
     def open_image(self):
+        """
+        Open image file
+        :return:
+        """
         if not self._image:
             try:
                 self._image = Image.open(self.path)
-            except UnidentifiedImageError as e:
-                logger.debug(f'open_image UnidentifiedImageError {self.path} - {e.strerror}')
-            except OSError as e:
-                logger.debug(f'open_image OSError {self.path} - {e.strerror}')
+            except UnidentifiedImageError as error:
+                logger.debug('open_image UnidentifiedImageError %s - %s', self.path, error.strerror)
+            except OSError as error:
+                logger.debug('open_image OSError %s - %s', self.path, error.strerror)
         return self._image
 
     def load_image_data(self):
+        """
+        Load the image data,  actual picture not metadata
+        :return:
+        """
         opened = False
         if not self._image_data:
             if not self._image:
@@ -483,13 +554,17 @@ class ImageCleaner(Cleaner):
                         self._image_data.append(val.histogram())
                 except OSError:  # pragma: no cover
                     # todo: Find a way to valid this.    OSError does not seem correct
-                    logger.error(f'Warning - failed to read image: {self.path}')
+                    logger.error('Warning - failed to read image: %s', self.path)
                     self._image = None
         if opened:
             self.close_image()
 
     @property
     def image_data(self):
+        """
+        Load image date and return as an element
+        :return:
+        """
         self.load_image_data()
         return self._image_data
 
@@ -519,15 +594,15 @@ class ImageCleaner(Cleaner):
         if platform.system() == 'Windows':
             logger.error('Conversion from HEIC is not supported on Windows')
             return self
-        else:
-            import pyheif
+
+        import pyheif  # pylint: disable=import-outside-toplevel
 
         original_name = self.path
         new_name = work_dir.joinpath(f'{self.path.stem}.jpg')
 
         if new_name.exists():
             new_name.unlink()
-            logger.debug(f'Cleaning up {new_name} - It already exists')
+            logger.debug('Cleaning up %s - It already exists', new_name)
 
         exif_dict = None
         heif_file = pyheif.read(original_name)
@@ -545,40 +620,12 @@ class ImageCleaner(Cleaner):
                 elif remove:
                     original_name.unlink()
                 return ImageCleaner(Path(new_name), self.folder)
-        except AttributeError as e:  # pragma: no cover
+        except AttributeError as error:  # pragma: no cover
             # todo: Try and find a real case where this is true
-            logger.error(f'Conversion error: {self.path} - Reason {e} is no metadata attribute')
+            logger.error('Conversion error: %s - Reason %s is no metadata attribute', self.path, error)
         return self  # pragma: no cover
 
-    """
-    def update_image(self):
-        '''
-        Update an image file with the data provided
-        :return: None
-        '''
-        changed = False
-        try:
-            exif_dict = piexif.load(str(self.path))
-            logger.debug(f'Update Image - success loading {self.path}')
-            if self._date:
-                changed = True
-                new_date = self._date.strftime("%Y:%m:%d %H:%M:%S")
-                exif_dict['0th'][piexif.ImageIFD.DateTime] = new_date
-                exif_dict['Exif'][piexif.ExifIFD.DateTimeOriginal] = new_date
-                exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
-            if changed:
-                try:
-                    exif_bytes = piexif.dump(exif_dict)
-                    piexif.insert(exif_bytes, str(self.path))
-                except ValueError as e:  # pragma: no cover
-                    logger.error(f'Failed to update {self.path} Error {e}')
-        except piexif.InvalidImageDataError:  # pragma: no cover
-            logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
-        except FileNotFoundError:  # pragma: no cover
-            logger.error(f'Failed to load {self.path} - File not Found')
-    """
-
-    def get_date_from_image(self):
+    def get_date_from_image(self) -> Union[datetime, None]:
         """
         Given an Image object,  attempt to extract the date it was take at
         :return: datetime
@@ -605,14 +652,14 @@ class ImageCleaner(Cleaner):
                     date_value, _ = str(image_date, 'utf-8').split(' ')
                     return datetime.strptime(date_value, '%Y:%m:%d')
                 except ValueError:  # pragma: no cover
-                    logger.debug(f'Corrupt date data {self.path}')  # pragma: no cover
+                    logger.debug('Corrupt date data %s', self.path)  # pragma: no cover
             else:
-                logger.debug(f'Could not find a date in {self.path}')
+                logger.debug('Could not find a date in %s', self.path)
 
         except piexif.InvalidImageDataError:
-            logger.debug(f'Failed to load {self.path} - Invalid JPEG/TIFF')
+            logger.debug('Failed to load %s - Invalid JPEG/TIFF', self.path)
         except FileNotFoundError:
-            logger.debug(f'Failed to load {self.path} - File not Found')
+            logger.debug('Failed to load %s - File not Found', self.path)
 
 
 class FolderCleaner(Cleaner):
@@ -678,6 +725,10 @@ class FolderCleaner(Cleaner):
 
     @property
     def size(self):
+        """
+        Number of direct elements
+        :return:
+        """
         count = 0
         for _ in self.path.iterdir():
             count += 1
@@ -751,16 +802,16 @@ class FolderCleaner(Cleaner):
         # We have a lot of paths that were generated by some other import
         if len(self.path.name) == 22 and self.path.name.find(' ') == -1:
             return None
-        elif re.match('^[0-9]{8}-[0-9]{6}$', self.path.name):  # Pure Date
+        if re.match('^[0-9]{8}-[0-9]{6}$', self.path.name):  # Pure Date
             return None
-        elif app_name and self.path.name.startswith(app_name):
+        if app_name and self.path.name.startswith(app_name):
             return None
-        else:
-            try:
-                int(self.path.name)
-                return None  # Pure date path
-            except ValueError:
-                pass
+
+        try:
+            int(self.path.name)
+            return None  # Pure date path
+        except ValueError:
+            pass
 
         description = None
         matched = False
@@ -801,5 +852,9 @@ class FolderCleaner(Cleaner):
 
     @staticmethod
     def reset():
+        """
+        clear the global root_path_list
+        :return:
+        """
         while root_path_list:
             root_path_list.pop()

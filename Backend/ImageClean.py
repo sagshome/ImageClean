@@ -1,15 +1,19 @@
+"""
+Run the actual image cleaning
+"""
+# pylint: disable=line-too-long
+
 import logging
 import os
 import pickle
-import re
 import tempfile
 
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Optional, Union
 
-from Backend.Cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
+from Backend.cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
 
 
 logger = logging.getLogger('Cleaner')
@@ -28,7 +32,9 @@ WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 memb
 
 
 class ImageClean:
-
+    """
+    This is the main class for image import,   create a instance,  and then .run it
+    """
     def __init__(self, app: str, restore=False, **kwargs):
         self.app_name = app
         self.run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
@@ -54,12 +60,12 @@ class ImageClean:
 
         if restore:  # Used by UI
             try:
-                f = open(self.conf_file, 'rb')
-                temp = pickle.load(f)
+                conf_file = open(self.conf_file, 'rb')
+                temp = pickle.load(conf_file)
                 self.process_args(temp)
-                f.close()
+                conf_file.close()
             except FileNotFoundError:
-                logger.debug(f'Restore attempt of {self.conf_file} failed')
+                logger.debug('Restore attempt of %s failed', self.conf_file)
         else:  # Used by cmdline
             self.process_args(kwargs)
 
@@ -81,6 +87,11 @@ class ImageClean:
         self.working_folder = tempfile.TemporaryDirectory()
 
     def process_args(self, kwargs: dict):
+        """
+        Allow for command line arguments
+        :param kwargs:
+        :return:
+        """
         for key in kwargs:
             if key == 'verbose':
                 self.verbose = kwargs[key]
@@ -110,6 +121,10 @@ class ImageClean:
                 assert False, f'Invalid option supplied: {key}'  # pragma: no cover
 
     def save_config(self):
+        """
+        Save,  for restarting
+        :return:
+        """
         config = {'verbose': self.verbose,
                   'recreate': self.recreate,
                   'do_convert': self.do_convert,
@@ -122,8 +137,8 @@ class ImageClean:
                   'ignore_folders': self.ignore_folders,
                   'bad_parents': self.bad_parents,
                   }
-        with open(self.conf_file, 'wb') as f:
-            pickle.dump(config, f, pickle.HIGHEST_PROTOCOL)
+        with open(self.conf_file, 'wb') as conf_file:
+            pickle.dump(config, conf_file, pickle.HIGHEST_PROTOCOL)
 
     def print(self, text):
         """
@@ -137,42 +152,97 @@ class ImageClean:
             print(text)
 
     def increment_progress(self):
+        """
+        Simple way to update progress / used in GUI
+        :return:
+        """
         self.progress += 1
 
     def set_recreate(self, value: bool):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         self.recreate = value
 
     def set_keep_duplicates(self, value: bool):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         self.keep_duplicates = value
 
     def set_keep_movie_clips(self, value: bool):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         self.keep_movie_clips = value
 
     def set_keep_converted_files(self, value: bool):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         self.keep_converted_files = value
 
     def set_keep_original_files(self, value: bool):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         self.keep_original_files = value
 
     def add_ignore_folder(self, value: Path):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         if value not in self.ignore_folders:
             self.ignore_folders.append(value)
             return True
         return False
 
     def add_bad_parents(self, value: str):
+        """
+        Maybe over kill ?
+
+        :param value:
+        :return:
+        """
         if value not in self.bad_parents:
             self.bad_parents.append(value)
             return True
         return False
 
     def set_paranoid(self, value: bool):
+        """
+        Set / Unset the 'saving' file settings
+        :param value:
+        :return:
+        """
         self.set_keep_duplicates(value)
         self.set_keep_original_files(value)
         self.set_keep_converted_files(value)
         self.set_keep_movie_clips(value)
 
     def prepare(self):
+        """
+        For the GUI,  we need a way to 'prepare' the environment
+        :return:
+        """
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
@@ -215,23 +285,33 @@ class ImageClean:
             if self.output_folder.exists():
                 os.rename(self.output_folder, f'{self.output_folder}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
 
-        os.mkdir(self.output_folder) if not self.output_folder.exists() else None
-        os.mkdir(self.no_date_path) if not self.no_date_path.exists() else None
-        os.mkdir(self.migrated_path) if self.migrated_path and not self.migrated_path.exists() else None
-        os.mkdir(self.duplicate_path) if self.duplicate_path and not self.duplicate_path.exists() else None
-        os.mkdir(self.image_movies_path) if self.image_movies_path and not self.image_movies_path.exists() else None
-        os.mkdir(self.small_path) if self.small_path and not self.small_path.exists() else None
+        if not self.output_folder.exists():
+            os.mkdir(self.output_folder)
+        if not self.no_date_path.exists():
+            os.mkdir(self.no_date_path)
+        if self.migrated_path and not self.migrated_path.exists():
+            os.mkdir(self.migrated_path)
+        if self.duplicate_path and not  self.duplicate_path.exists():
+            os.mkdir(self.duplicate_path)
+        if self.image_movies_path and not self.image_movies_path.exists():
+            os.mkdir(self.image_movies_path)
+        if self.small_path and not self.small_path.exists():
+            os.mkdir(self.small_path)
 
         Cleaner.add_to_root_path(self.no_date_path)
 
     def stop(self):
+        """
+        Only logically way when you have prepare and run
+        :return:
+        """
         if self.working_folder:
             self.working_folder.cleanup()
             self.working_folder = None
 
     def run(self):
         """
-        Some further processing once all the options have been set.
+        This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
         self.prepare()
         # Start it up.
@@ -262,6 +342,12 @@ class ImageClean:
                 file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register()
 
     def folder_test(self, folder1, folder2) -> int:
+        """
+        comapre two folders.   this is in teh folderCleaner class but not much use for us with specialized folders
+        :param folder1:
+        :param folder2:
+        :return:
+        """
         if folder1 and folder2:
             # Need to filter out application specific descriptions
             folder1_description = None if folder1.description and folder1.description.startswith(
@@ -279,8 +365,7 @@ class ImageClean:
             if folder1.date and folder2.date:
                 if folder1.date > folder2.date:
                     return LESSER
-                else:
-                    return GREATER
+                return GREATER
             if folder1.date and not folder2.date:
                 return GREATER
             if folder2.date and not folder1.date:
@@ -317,10 +402,8 @@ class ImageClean:
                                                            remove=self.remove_file(this))
                                         break
                         else:  # I am not in the right place.
-                            is_duplicate = False
                             if new_path.joinpath(this.path.name).exists():
                                 new_path = self.get_new_path(this, is_duplicate=True, preserve=True)
-                                is_duplicate = True
                             this.relocate_file(new_path, remove=self.remove_file(this))
 
     def process_duplicates_movies(self):
@@ -342,6 +425,11 @@ class ImageClean:
                     break
 
     def audit_folders(self, path: Path):
+        """
+        Look for large and empty folders
+        :param path:
+        :return:
+        """
         for entry in path.iterdir():
             if entry.is_dir():
                 self.audit_folders(entry)
@@ -352,7 +440,6 @@ class ImageClean:
                 elif size > WARNING_FOLDER_SIZE:
                     self.suspicious_folders.append(entry)
                     self.print(f'  VERY large folder ({size}) found {entry}')
-        pass
 
     def get_new_path(self, path_obj: Cleaner, is_duplicate: bool = False, preserve: bool = False) -> Optional[Path]:
         """
@@ -384,8 +471,6 @@ class ImageClean:
             if not date:
                 date = path_obj.folder.date
 
-        #if description_path and self.output_folder == self.input_folder:
-
         if not date and description_path:
             return base.joinpath(description_path)
 
@@ -411,7 +496,7 @@ class ImageClean:
             os.makedirs(new)
         return new
 
-    def process_file(self, entry: Union[FileCleaner, ImageCleaner]):
+    def process_file(self, entry: Union[FileCleaner, ImageCleaner]):  # pylint: disable=too-many-branches
         """
         Perform any conversions
         Extract image date
@@ -453,22 +538,26 @@ class ImageClean:
                         if value.path.parent != new_path:
                             self.print(f'.. File: {entry.path} existing file is relocating to {new_path}')
                             entry.relocate_file(new_path, register=True, remove=True)
-                        else:  # todo: just remove this else once the logic is verified
-                            pass  # This the same contents,  same path
                         break
-                    else:  # These identical files are stored in different paths.
-                        if value.path.parent == new_path:  # A copy already exists where we should be
-                            found = True
-                            duplicate_path = self.get_new_path(entry, is_duplicate=True)
-                            self.print(f'.. File: {entry.path} duplicate file relocating to {duplicate_path}')
-                            entry.relocate_file(duplicate_path, remove=self.remove_file(entry))
-                            break
+
+                    # These identical files are stored in different paths.
+                    if value.path.parent == new_path:  # A copy already exists where we should be
+                        found = True
+                        duplicate_path = self.get_new_path(entry, is_duplicate=True)
+                        self.print(f'.. File: {entry.path} duplicate file relocating to {duplicate_path}')
+                        entry.relocate_file(duplicate_path, remove=self.remove_file(entry))
+                        break
 
             if not found:
                 self.print(f'.. File: {entry.path} similar copy relocating to {new_path}')
                 entry.relocate_file(new_path, register=True, remove=self.remove_file(entry))
 
     def process_folder(self, folder: FolderCleaner):
+        """
+        Loop over the folders,  recursive
+        :param folder:
+        :return:
+        """
         # self.print(f'. Folder: {folder.path}')
         for entry in folder.path.iterdir():
             if entry.is_dir() and entry not in self.ignore_folders:
@@ -490,7 +579,6 @@ class ImageClean:
             # This file is on the input path
             if self.force_keep:
                 return False
-            elif self.keep_original_files:
+            if self.keep_original_files:
                 return False
         return True
-
