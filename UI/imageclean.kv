@@ -87,6 +87,7 @@
             text: 'Help'
             background_color: utils.get_color_from_hex('#00FF00')
             size_hint: 0.3, 1.0
+            on_press: root.help()
         Button:
             text: ''
             opacity: 0
@@ -94,19 +95,17 @@
             background_color: utils.get_color_from_hex('#00FF00')
             text: 'About'
             size_hint_x: 0.3
+            on_press: root.about()
+
     FolderSelector:
-        input_button_text: 'Select Input Folder'
-        get_label_value: self.get_input()
-        load_callback: self.set_input
-    FolderSelector:
-        input_button_text: 'Change Output Folder'
+        input_button_text: 'Select Images Folder'
         get_label_value: self.get_output()
         load_callback: self.set_output
         show_new_button: 1
-    CheckBoxItem:
-        text: "Recreate - recreate output folder - Forces a backup"
-        check_value: False
-        callback: self.set_recreate
+    FolderSelector:
+        input_button_text: 'Import Images Folder'
+        get_label_value: self.get_input()
+        load_callback: self.set_input
     CheckBoxItem:
         text: "Keep Originals - Don't remove original files!"
         check_value: True
@@ -178,13 +177,12 @@
 <DismissDialog>:
     # Reusable dialog to display warnings/errors/info
     BoxLayout:
-
-        #pos_hint: {'right': 1, 'center': 0.5}
+        pos_hint: {'right': 1, 'center': 0.5}
         orientation: 'vertical'
         Label:
             text: root.error_text
         Button:
-            #size_hint: 1, 0.2
+            size_hint: 1, 0.2
             text: "Dismiss"
             background_color: utils.get_color_from_hex('#0E2BF1')
             on_release:

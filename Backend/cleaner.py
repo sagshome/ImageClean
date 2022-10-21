@@ -29,10 +29,10 @@ logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
 IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
 SMALL_IMAGE = 360  # If width and height are less then this, it is thumb nail or some other derived file.
 
-CT = TypeVar("CT", bound="Cleaner")
-FileCT = TypeVar("FileCT", bound="FileCleaner")
-ImageCT = TypeVar("ImageCT", bound="ImageCleaner")
-FolderCT = TypeVar("FolderCT", bound="FolderCleaner")
+CT = TypeVar("CT", bound="Cleaner")  # pylint: disable=invalid-name
+FileCT = TypeVar("FileCT", bound="FileCleaner")  # pylint: disable=invalid-name
+ImageCT = TypeVar("ImageCT", bound="ImageCleaner")  # pylint: disable=invalid-name
+FolderCT = TypeVar("FolderCT", bound="FolderCleaner")  # pylint: disable=invalid-name
 
 # A couple of caches
 duplicate_hash: Dict[str, List[CT]] = {}  # This hash is used to store processed files
@@ -347,13 +347,13 @@ class Cleaner:
         :return:
         """
         # todo: break out of this loop
-        if os.path.exists(destination):
+        if destination.exists():
             for increment in reversed(range(20)):  # 19 -> 0
-                old_path = f'{destination.parent}{os.path.sep}{destination.stem}_{increment}{destination.suffix}'
-                new_path = f'{destination.parent}{os.path.sep}{destination.stem}_{increment + 1}{destination.suffix}'
-                if os.path.exists(old_path):
+                old_path = destination.parent.joinpath(f'{destination.stem}_{increment}{destination.suffix}')
+                new_path = destination.parent.joinpath(f'{destination.stem}_{increment + 1}{destination.suffix}')
+                if old_path.exists():
                     os.rename(old_path, new_path)
-            os.rename(destination, f'{destination.parent}{os.path.sep}{destination.stem}_0{destination.suffix}')
+            os.rename(destination, destination.parent.joinpath(f'{destination.stem}_0{destination.suffix}'))
 
     @classmethod
     def clear_caches(cls):

@@ -313,6 +313,7 @@ class ImageClean:
         """
         This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
+
         self.prepare()
         # Start it up.
         master = FolderCleaner(self.input_folder,

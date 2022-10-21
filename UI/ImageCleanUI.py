@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import platform
 import sys
 from multiprocessing import Process, Value, Queue
 import types
@@ -8,7 +10,7 @@ from pathlib import Path
 from time import sleep  # Hangs head in shame
 
 from kivy.clock import Clock
-from kivy.app import App
+from kivy.app import App, async_runTouchApp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.floatlayout import FloatLayout
@@ -29,7 +31,8 @@ log_file = run_path.joinpath('logfile')
 results_file = run_path.joinpath(f'{application_name}.results')
 
 if results_file.exists():
-    FileCleaner.rollover_name(results_file)
+    results_file.unlink()
+    #FileCleaner.rollover_name(results_file)
 RESULTS = open(results_file, "w+")
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
@@ -50,7 +53,6 @@ mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
 mp_print_queue = Queue()
 
-
 if debugging:
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
@@ -59,6 +61,7 @@ if debugging:
 else:
     logger.setLevel(level=logging.ERROR)
 
+LOOP = asyncio.get_event_loop()
 
 def dismiss_dialog(title, text):
     content = DismissDialog(text)
@@ -110,7 +113,6 @@ class CheckBoxItem(BoxLayout):
     def set_process_small(touch):
         #cleaner_app.set_keep_original_files(touch)
         logger.debug(f'process small is {touch}')
-
 
 
 class LoadDialog(FloatLayout):
@@ -205,7 +207,7 @@ class Progress(Widget):
                                      f"Output File Count: {mp_output_count.value}"
 
         self.progress_text.text = "Results:\n\n"
-        self.bg_process = Process(target=self.run_application)
+        # self.bg_process = Process(target=self.run_application)
         self.bg_process.start()
 
     def run_application(self):
@@ -329,7 +331,10 @@ class FolderSelector(BoxLayout):
     def set_input(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.input_folder = Path(self.input_label_value)
-        Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+        if platform.system() != 'Windows':
+            Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+        else:
+            self.parent.calculate_size(cleaner_app.input_folder, mp_input_count)
 
     def get_output(self):
         value = str(cleaner_app.output_folder)
@@ -341,7 +346,10 @@ class FolderSelector(BoxLayout):
     def set_output(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.output_folder = Path(self.input_label_value)
-        Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
+        if platform.system() != 'Windows':
+            Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
+        else:
+            self.parent.calculate_size(cleaner_app.output_folder, mp_input_count)
 
     def get_skip_name(self):
         value = ''
@@ -391,11 +399,12 @@ class Main(BoxLayout):
 
         cleaner_app.print = types.MethodType(self.progress.override_print, cleaner_app)
         cleaner_app.increment_progress = types.MethodType(self.progress.override_progress, cleaner_app)
-
-        Process(target=self.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-        Process(target=self.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
+        if platform.system() != 'Windows':
+            Process(target=self.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+            Process(target=self.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
 
     def help(self):
+        print('foobar')
         dismiss_dialog('Help',
                        f"ImageClean: Organize images based on dates and custom folder names.  The date format is:\n"
                        f"  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
@@ -421,7 +430,6 @@ class Main(BoxLayout):
                        #f"Attributions:\n\n"
                        #f"https://www.vecteezy.com/free-vector/buttons - Buttons Vectors by Vecteezy"
                       )
-
 
     def check_recreate(self, touch):
         cleaner_app.set_recreate(touch)
@@ -461,8 +469,8 @@ class Main(BoxLayout):
             if Path(base) not in cleaner_app.ignore_folders:
                 for _ in files:
                     value += 1
-            else:
-                print(f'Ignoring: {base}')
+            #else:
+            #    print(f'Ignoring: {base}')
         which.value = value
 
     def set_input_folder(self):
@@ -479,6 +487,11 @@ class ImageCleanApp(App):
 if __name__ == '__main__':
 
     my_app = ImageCleanApp()
-    my_app.run()
+    LOOP.run_until_complete(
+        async_runTouchApp(my_app, async_lib='asyncio')
+    )
+
+    #my_app = ImageCleanApp()
+    #my_app.run()
 
     #ImageCleanApp().run()

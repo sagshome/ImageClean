@@ -83,7 +83,7 @@ if __name__ == '__main__':
         sys.exit(2)
 
     if len(args) != 1:
-        print(f'Only one argument <input folder> is required.\n\n')
+        print('Only one argument <input folder> is required.\n\n')
         print(APP_HELP)
         sys.exit(2)
     else:
