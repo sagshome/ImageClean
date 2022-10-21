@@ -28,12 +28,12 @@ run_path = Path(Path.home().joinpath(f'.{application_name}'))
 os.mkdir(run_path) if not run_path.exists() else None
 
 log_file = run_path.joinpath('logfile')
-results_file = run_path.joinpath(f'{application_name}.results')
-
-if results_file.exists():
-    results_file.unlink()
-    #FileCleaner.rollover_name(results_file)
-RESULTS = open(results_file, "w+")
+# results_file = run_path.joinpath(f'{application_name}.results')
+#
+# if results_file.exists():
+#     results_file.unlink()
+#     #FileCleaner.rollover_name(results_file)
+# RESULTS = open(results_file, "w+")
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_name(log_file)
@@ -62,6 +62,36 @@ else:
     logger.setLevel(level=logging.ERROR)
 
 LOOP = asyncio.get_event_loop()
+
+
+def calculate_size(path, which):
+    which.value = -1  # -1 is a test for uninitialized
+    value = 0
+    for base, dirs, files in os.walk(path):
+        if Path(base) not in cleaner_app.ignore_folders:
+            for _ in files:
+                value += 1
+        # else:
+        #    print(f'Ignoring: {base}')
+    which.value = value
+
+
+def run_application():
+    master = FolderCleaner(cleaner_app.input_folder,
+                           parent=None,
+                           root_folder=cleaner_app.input_folder,
+                           output_folder=cleaner_app.output_folder)
+
+    master.description = None
+    cleaner_app.run()
+    # root_folder=cleaner_app.no_date_path))
+    # suspicious_folders = cleaner_app.audit_folders(cleaner_app.output_folder)
+    # if suspicious_folders:
+    #     self.override_print('_', 'The following folders where found to contain a large number of files,  '
+    #                              'thus they are suspicious\n')
+    #     for folder in suspicious_folders:
+    #         self.override_print('_', folder)
+
 
 def dismiss_dialog(title, text):
     content = DismissDialog(text)
@@ -167,11 +197,11 @@ class Progress(Widget):
             mp_output_count.value = mp_processed_value.value
 
         # Update results text,  we need to truncate since the text box widget can not handle large amounts of data
-        # todo: this truncation works but make for jumpy text,  maybe we can do better.
+        # todo: this truncation works but it makes for jumpy text,  maybe we can do better.
         new_text = self.progress_text.text
         while not mp_print_queue.empty():
             new_line = f'{mp_print_queue.get()}\n'
-            RESULTS.write(new_line)  # This is the full output,  just in case.
+            # RESULTS.write(new_line)  # This is the full output,  just in case.
             new_text = f'{new_text}{new_line}'
 
         if len(new_text) > self.max_results_size:
@@ -186,8 +216,8 @@ class Progress(Widget):
                                          f"Output Folder: {cleaner_app.output_folder}\n" \
                                          f"Output File Count: {mp_output_count.value}"
 
-            self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
-            RESULTS.close()
+            # self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
+            # RESULTS.close()
             return False  # Stops this periodic task
 
     def start_application(self):
@@ -207,7 +237,7 @@ class Progress(Widget):
                                      f"Output File Count: {mp_output_count.value}"
 
         self.progress_text.text = "Results:\n\n"
-        # self.bg_process = Process(target=self.run_application)
+        self.bg_process = Process(target=run_application)
         self.bg_process.start()
 
     def run_application(self):
@@ -331,10 +361,7 @@ class FolderSelector(BoxLayout):
     def set_input(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.input_folder = Path(self.input_label_value)
-        if platform.system() != 'Windows':
-            Process(target=self.parent.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-        else:
-            self.parent.calculate_size(cleaner_app.input_folder, mp_input_count)
+        Process(target=calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
 
     def get_output(self):
         value = str(cleaner_app.output_folder)
@@ -346,10 +373,7 @@ class FolderSelector(BoxLayout):
     def set_output(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.output_folder = Path(self.input_label_value)
-        if platform.system() != 'Windows':
-            Process(target=self.parent.calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
-        else:
-            self.parent.calculate_size(cleaner_app.output_folder, mp_input_count)
+        Process(target=calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
 
     def get_skip_name(self):
         value = ''
@@ -399,9 +423,8 @@ class Main(BoxLayout):
 
         cleaner_app.print = types.MethodType(self.progress.override_print, cleaner_app)
         cleaner_app.increment_progress = types.MethodType(self.progress.override_progress, cleaner_app)
-        if platform.system() != 'Windows':
-            Process(target=self.calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-            Process(target=self.calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
+        Process(target=calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+        Process(target=calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
 
     def help(self):
         print('foobar')
@@ -486,12 +509,13 @@ class ImageCleanApp(App):
 
 if __name__ == '__main__':
 
-    my_app = ImageCleanApp()
-    LOOP.run_until_complete(
-        async_runTouchApp(my_app, async_lib='asyncio')
-    )
-
     #my_app = ImageCleanApp()
-    #my_app.run()
+    #LOOP.run_until_complete(
+    #    async_runTouchApp(my_app, async_lib='asyncio')
+    #)
+
+    my_app = ImageCleanApp()
+    my_app.run()
+    print('foobar')
 
     #ImageCleanApp().run()

@@ -338,7 +338,10 @@ class ImageClean:
         """
         for entry in output_dir.iterdir():
             if entry.is_dir():
-                self.register_files(entry)
+                try:
+                    self.register_files(entry)
+                except PermissionError:
+                    pass  # This can happen,  just ignore it
             else:
                 file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register()
 
