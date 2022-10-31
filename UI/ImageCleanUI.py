@@ -18,8 +18,8 @@ from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, Num
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
-from Backend.cleaner import FileCleaner, FolderCleaner
-from Backend.image_clean import ImageClean
+from backend.cleaner import FileCleaner, FolderCleaner
+from backend.image_clean import ImageClean
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
@@ -123,11 +123,6 @@ class CheckBoxItem(BoxLayout):
             self.callback(checkbox.active)
 
     @staticmethod
-    def set_recreate(touch):
-        cleaner_app.set_recreate(touch)
-        logger.debug(f'recreate is {touch}')
-
-    @staticmethod
     def set_keep_originals(touch):
         cleaner_app.set_keep_original_files(touch)
         logger.debug(f'keep_originals is {touch}')
@@ -165,8 +160,6 @@ class EnterFolder(TextInput):
 class ActionBox(BoxLayout):
 
     def start_processing(self):
-        if cleaner_app.recreate:
-            mp_output_count.value = 0
         cleaner_app.save_config()
         main = self.parent
         main.clear_widgets()
@@ -193,8 +186,6 @@ class Progress(Widget):
 
         # Update progress bar
         self.progress_bar.value = mp_processed_value.value
-        if cleaner_app.recreate:
-            mp_output_count.value = mp_processed_value.value
 
         # Update results text,  we need to truncate since the text box widget can not handle large amounts of data
         # todo: this truncation works but it makes for jumpy text,  maybe we can do better.
@@ -249,7 +240,7 @@ class Progress(Widget):
 
         master.description = None
         cleaner_app.prepare()
-        cleaner_app.process_folder(master)
+        cleaner_app._process_folder(master)
         master.reset()
         cleaner_app.process_duplicates_movies(FolderCleaner(cleaner_app.no_date_path,
                                                             root_folder=cleaner_app.no_date_path))
@@ -453,14 +444,6 @@ class Main(BoxLayout):
                        #f"Attributions:\n\n"
                        #f"https://www.vecteezy.com/free-vector/buttons - Buttons Vectors by Vecteezy"
                       )
-
-    def check_recreate(self, touch):
-        cleaner_app.set_recreate(touch)
-        logger.debug(f'recreate is {touch}')
-
-    @staticmethod
-    def get_recreate():
-        return cleaner_app.recreate
 
     def check_keep_dups(self, touch):
         cleaner_app.set_keep_duplicates(touch)

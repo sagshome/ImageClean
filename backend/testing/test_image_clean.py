@@ -5,7 +5,9 @@ Test Cases for the Image Clean classes
 # pylint: disable=line-too-long
 # pylint: disable=missing-class-docstring
 # pylint: disable=missing-function-docstring
+# pylint: disable=duplicate-code
 
+import asyncio
 import os
 import stat
 import sys
@@ -19,15 +21,15 @@ from unittest.mock import patch
 from freezegun import freeze_time
 import pytest
 
-from Backend.cleaner import Cleaner
-from Backend.image_clean import ImageClean
+from backend.cleaner import Cleaner, file_cleaner
+from backend.image_clean import ImageClean
 from Utilities.test_utilities import create_image_file, count_files, set_date, copy_file, DATE_SPEC, DIR_SPEC
 
 sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack,
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
-class ActualScenarioTest(unittest.TestCase):
+class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
     """
     Create real world scenerio's for testing.   This is perhaps not unit tests but system tests
 
@@ -35,20 +37,21 @@ class ActualScenarioTest(unittest.TestCase):
 
 
     """
+
     # pylint: disable=too-many-public-methods, too-many-instance-attributes
     def tearDown(self):
         self.temp_base.cleanup()
         Cleaner.clear_caches()
-        super(ActualScenarioTest, self).tearDown()
+        super().tearDown()
 
     def setUp(self):
-        super(ActualScenarioTest, self).setUp()
+        super().setUp()
         self.my_location = Path(os.path.dirname(__file__))
         self.app_name = 'test_instance'
         self.other_folder_name = 'CustomName'
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
         self.other_folder = self.input_folder.joinpath(self.other_folder_name)
@@ -61,10 +64,11 @@ class ActualScenarioTest(unittest.TestCase):
         self.heic_file = self.my_location.joinpath('data').joinpath('heic_image.HEIC')
         self.jpg_file = self.my_location.joinpath('data').joinpath('jpeg_image.jpg')
 
-        # print(f'{str(self)} - {self.temp_base.name}')
+        print(f'{str(self)} - {self.temp_base.name}')
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_rollover_again(self, home):
+    async def test_rollover_again(self, home):
         """
         ./Input/file.jpg
         ./Output/test_instance_NoDate/file.jpg
@@ -79,20 +83,22 @@ class ActualScenarioTest(unittest.TestCase):
         home.return_value = Path(self.temp_base.name)
         input_file = create_image_file(self.input_folder, None, text='foo_new')
         existing1 = create_image_file(self.output_folder.joinpath('test_instance_NoDate'), None, text='original No Date')
-        existing2 = create_image_file(self.output_folder.joinpath('test_instance_NoDate').joinpath('file_0.jpg'), None, text='original Rolled Over')
+        existing2 = create_image_file(self.output_folder.joinpath('test_instance_NoDate').joinpath('file_0.jpg'),
+                                      None, text='original Rolled Over')
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertFalse(input_file.exists())
         self.assertTrue(existing1.exists())
         self.assertTrue(existing2.exists())
         self.assertTrue(existing2.parent.joinpath('file_1.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_recursive_folders(self, home):
+    async def test_recursive_folders(self, home):
         """
         ./Input/custom1/custom2/file.jpg
 
@@ -104,12 +110,13 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath('custom1').joinpath('custom2').joinpath('file.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_restart_ignore_custom_folder(self, home):
+    async def test_restart_ignore_custom_folder(self, home):
         """
 
             ./Input/1961/9/27/internal_date.jpg
@@ -153,39 +160,26 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.verbose = True
         cleaner.add_bad_parents('custom')
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.input_folder.joinpath('test_instance_NoDate').exists(), 'test_instance_NoDate')
         self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath('internal_date.jpg').exists(), 'internal_date.jpg')
         self.assertTrue(
-            self.input_folder.joinpath(DIR_SPEC).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}.jpg').exists(), f'{DATE_SPEC.strftime("%Y%m%d-010101")}.jpg')
+            self.input_folder.joinpath(DIR_SPEC).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}.jpg').exists(),
+            f'{DATE_SPEC.strftime("%Y%m%d-010101")}.jpg')
         self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath('struct_date.jpg').exists(), 'struct_date.jpg')
         self.assertTrue(self.input_folder.joinpath('test_instance_NoDate').joinpath('no_date_custom.jpg').exists(), 'no_date_custom.jpg')
         self.assertTrue(self.input_folder.joinpath(DIR_SPEC).joinpath('internal_date_custom.jpg').exists(), 'internal_date_custom.jpg')
         self.assertTrue(
-            self.input_folder.joinpath(DIR_SPEC).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg').exists(), f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg')
+            self.input_folder.joinpath(DIR_SPEC).joinpath(f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg').exists(),
+            f'{DATE_SPEC.strftime("%Y%m%d-010101")}_custom.jpg')
         self.assertTrue(
             self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('1').joinpath('1').joinpath(
                 'struct_date_custom.jpg').exists(), 'struct_date_custom.jpg')
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_restart_no_changes3(self, home):
-        """
-
-            ./Input/1961/9/27/internal_date.jpg
-            ./Input/1961/9/27/struct_date.jpg
-            ./Input/1961/9/27/19610927-010101.jpg
-            ./Input/1961/CustomName/struct_date_custom.jpg
-            ./Input/1961/CustomName/19610927-010101_custom.jpg
-            ./Input/1961/CustomName/internal_date_custom.jpg
-            ./Input/test_instance_NoDate/nodate.jpg
-            ./Input/test_instance_NoDate/CustomName/no_date_custom.jpg
-
-        """
-        home.return_value = Path(self.temp_base.name)
-
-    @patch('pathlib.Path.home')
-    def test_restart_no_changes4(self, home):
+    async def test_restart_no_changes4(self, home):
         """
 
             ./Input/1961/9/27/internal_date.jpg
@@ -207,12 +201,13 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.input_folder)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom').joinpath('image.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_restart_no_changes(self, home):
+    async def test_restart_no_changes(self, home):
         """
 
             ./Input/1961/9/27/internal_date.jpg
@@ -245,7 +240,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.input_folder)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(no_date.exists())
         self.assertTrue(internal_date.exists())
@@ -256,8 +251,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertTrue(name_custom.exists())
         self.assertTrue(struct_custom.exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_jpg_files_single(self, home):
+    async def test_jpg_files_single(self, home):
         """
 
             ./Output/CustomName/no_date_custom.jpg
@@ -274,12 +270,13 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
         cleaner.add_bad_parents('custom')
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.no_date_path.joinpath('file.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_jpg_files(self, home):
+    async def test_jpg_files(self, home):
         """
             ./Input/nodate.jpg
             ./Input/internal_date.jpg
@@ -315,7 +312,7 @@ class ActualScenarioTest(unittest.TestCase):
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.no_date_path.joinpath(no_date.name).exists())
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath('internal_date.jpg').exists())
@@ -333,8 +330,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).
                         joinpath(self.other_folder.name).joinpath('struct_date_custom.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_small_files(self, home):
+    async def test_small_files(self, home):
         """
             ./Input/nodate.jpg
             ./Input/internal_date.jpg
@@ -372,7 +370,7 @@ class ActualScenarioTest(unittest.TestCase):
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.small_path.joinpath(cleaner.no_date_base).joinpath('nodate.jpg').exists())
         self.assertTrue(cleaner.small_path.joinpath(DIR_SPEC).joinpath('internal_date.jpg').exists())
@@ -390,9 +388,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertTrue(cleaner.small_path.joinpath(str(DATE_SPEC.year)).
                         joinpath(self.other_folder.name).joinpath('struct_date_custom.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_mov_files_keep(self, home):
-
+    async def test_mov_files_keep(self, home):
         home.return_value = Path(self.temp_base.name)
         no_date_mov = copy_file(self.jpg_file, self.input_folder, new_name='no_date.mov')
         set_date(no_date_mov, None)
@@ -403,7 +401,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_movie_clips(True)
         cleaner.set_keep_original_files(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.no_date_path.joinpath('no_date.jpg').exists())
         self.assertTrue(cleaner.image_movies_path.joinpath('no_date.mov').exists())
@@ -411,9 +409,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.input_folder), 3)
         self.assertEqual(count_files(self.output_folder), 3)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_mov_files_no_keep(self, home):
-
+    async def test_mov_files_no_keep(self, home):
         home.return_value = Path(self.temp_base.name)
         no_date_mov = copy_file(self.jpg_file, self.input_folder, new_name='no_date.mov')
         set_date(no_date_mov, None)
@@ -424,15 +422,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_movie_clips(False)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.no_date_path.joinpath('no_date.jpg').exists())
         self.assertTrue(cleaner.no_date_path.joinpath('other_no_date.mov').exists())
         self.assertEqual(count_files(self.input_folder), 0)
         self.assertEqual(count_files(self.output_folder), 2)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_heic_files(self, home):
+    async def test_heic_files(self, home):
         """
             ./Input/heic_image.HEIC
 
@@ -448,15 +447,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(True)
         cleaner.set_keep_converted_files(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.migrated_path.joinpath(heic.name).exists())
         self.assertTrue(heic.exists())
         self.assertTrue(self.output_folder.  # Kludge,  I just know the date on the file.  cheater, cheater
                         joinpath('2021').joinpath('10').joinpath('7').joinpath(f'{heic.stem}.jpg').exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_new_date(self, home):
+    async def test_dup_jpg_new_date(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             ./Output/test_instance_NoDate/no_date.jpg
@@ -476,15 +476,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath(self.jpg_file.name).exists())
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(self.jpg_file.name).exists())
 
         self.assertEqual(count_files(self.output_folder), 2)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_old_date_again(self, home):
+    async def test_dup_jpg_old_date_again(self, home):
         """
             ./Input/1961/9/27/file.jpg
             ./Output/test_instance_NoDate/file.jpg
@@ -507,7 +508,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('file_0.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
@@ -515,8 +516,9 @@ class ActualScenarioTest(unittest.TestCase):
 
         self.assertEqual(count_files(self.output_folder), 3)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_old_date(self, home):
+    async def test_dup_jpg_old_date(self, home):
         """
             ./Input/1961/9/27/file.jpg
             ./Output/test_instance_NoDate/file.jpg
@@ -536,15 +538,51 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath('file.jpg').exists())
 
         self.assertEqual(count_files(self.output_folder), 2)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_no_dups(self, home):
+    async def test_dup_jpg_old_date_exists(self, home):
+        """
+            ./Output/1961/custom1/file.jpg
+            ./Output/1961/custom2/file.jpg
+            ./Output/test_instance_NoDate/file.jpg
+
+            invalidated custom2
+
+            after run
+            ./Output/1961/custom/file.jpg
+            ./Output/test_instance_NoDate/file.jpg
+            ./Output/test_instance_Duplicates/test_instance_NoDate/file.jpg
+
+        """
+
+        home.return_value = Path(self.temp_base.name)
+        create_image_file(self.output_folder.joinpath('custom1'), None)
+        create_image_file(self.output_folder.joinpath('custom2'), None)
+        create_image_file(self.output_folder.joinpath('test_instance_NoDate'), None)
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
+        cleaner.set_keep_original_files(False)
+        cleaner.set_keep_duplicates(True)
+        cleaner.verbose = False
+        cleaner.add_bad_parents('custom2')
+        await cleaner.run()
+
+        self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
+        self.assertTrue(cleaner.no_date_path.joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath('custom1').joinpath('file.jpg').exists())
+
+        self.assertEqual(count_files(self.output_folder), 3)
+
+    @pytest.mark.asyncio
+    @patch('pathlib.Path.home')
+    async def test_dup_jpg_files_no_dups(self, home):
         """
             ./Input/jpeg_image.jpg
             ./Input/1961/9/27/jpeg_image.jpg
@@ -557,7 +595,6 @@ class ActualScenarioTest(unittest.TestCase):
             ./Output/test_instance_NoDate/CustomName/no_date.jpg
 
         """
-
         home.return_value = Path(self.temp_base.name)
         no_date = copy_file(self.jpg_file, self.input_folder, new_name='no_date.jpg')
         set_date(no_date, None)
@@ -574,7 +611,12 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(True)
         cleaner.set_keep_duplicates(False)
         cleaner.verbose = False
-        cleaner.run()
+        from time import sleep
+        #sleep(2)
+        print('slept')
+        await cleaner.run()
+        #sleep(2)
+        print('Run again')
 
         self.assertTrue(self.output_folder.joinpath(self.other_folder.name).joinpath('no_date.jpg').exists())
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).
@@ -582,9 +624,12 @@ class ActualScenarioTest(unittest.TestCase):
 
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 6)
+        #sleep(5)
+        print('Done')
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_with_dups(self, home):
+    async def test_dup_jpg_files_with_dups(self, home):
         """
             ./Input/jpeg_image.jpg  <- Internal Date
             ./Input/1961/9/27/jpeg_image.jpg
@@ -627,11 +672,13 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
-        self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).joinpath(internal_date.name).exists())
+        self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).
+                        joinpath(internal_date.name).exists())
 
-        self.assertTrue(cleaner.duplicate_path.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).joinpath(internal_date.name).exists())
+        self.assertTrue(cleaner.duplicate_path.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).
+                        joinpath(internal_date.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath('jpeg_image.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath('jpeg_image_0.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('no_date.jpg').exists())
@@ -641,8 +688,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.output_folder), 6)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_earlier_date(self, home):
+    async def test_dup_jpg_files_earlier_date(self, home):
         """
             Date storage is based on the earlier of folder dates is no dates on images
 
@@ -667,7 +715,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath('file.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(next_day).joinpath('file.jpg').exists())
@@ -675,8 +723,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.output_folder), 3)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_custom_no_dates(self, home):
+    async def test_dup_jpg_files_custom_no_dates(self, home):
         """
             ./Input/custom1/jpeg_image.jpg
             ./Input/custom3/jpeg_image.jpg
@@ -700,7 +749,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath('custom1').joinpath(self.jpg_file.name).exists())
         self.assertTrue(self.output_folder.joinpath('custom2').joinpath(self.jpg_file.name).exists())
@@ -709,8 +758,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.output_folder), 3)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_custom_with_date(self, home):
+    async def test_dup_jpg_files_custom_with_date(self, home):
         """
 
             ./Input/custom1/jpeg_image.jpg
@@ -735,7 +785,7 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.
                         joinpath(str(DATE_SPEC.year)).joinpath('custom3').joinpath('file.jpg').exists())
@@ -745,8 +795,9 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.output_folder), 3)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_custom_date2(self, home):
+    async def test_dup_jpg_files_custom_date2(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -770,15 +821,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(no_date.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(next_day).joinpath(no_date.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_internal_date1(self, home):
+    async def test_dup_jpg_files_internal_date1(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -800,15 +852,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(new.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(next_day).joinpath(new.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_internal_date2(self, home):
+    async def test_dup_jpg_files_internal_date2(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -830,15 +883,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(new.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(next_day).joinpath(new.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_internal_date3(self, home):
+    async def test_dup_jpg_files_internal_date3(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -860,15 +914,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(new.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath(new.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_internal_date4(self, home):
+    async def test_dup_jpg_files_internal_date4(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -889,15 +944,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath('file.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(next_day).joinpath('file.jpg').exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_dup_jpg_files_custom_over_date(self, home):
+    async def test_dup_jpg_files_custom_over_date(self, home):
         """
             ./Input/1961/9/27/jpeg_image.jpg
             # existing
@@ -916,15 +972,16 @@ class ActualScenarioTest(unittest.TestCase):
         cleaner.set_keep_original_files(False)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath('custom').joinpath(self.jpg_file.name))
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath(self.jpg_file.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_txt_files(self, home):
+    async def test_txt_files(self, home):
         """
             ./Input/nodate.txt
             ./Input/internal_date.txt
@@ -955,7 +1012,7 @@ class ActualScenarioTest(unittest.TestCase):
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertFalse(cleaner.no_date_path.joinpath('nodate.txt').exists())
         self.assertFalse(self.output_folder.joinpath(DIR_SPEC).joinpath('internal_date.txt').exists())
@@ -976,16 +1033,16 @@ class ActualScenarioTest(unittest.TestCase):
         self.assertEqual(count_files(self.input_folder), 8)
 
 
-class InitTest(unittest.TestCase):
+class InitTest(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
-        super(InitTest, self).setUp()
-        self.tempdir = tempfile.TemporaryDirectory()
+        super().setUp()
+        self.tempdir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         # print(f'\n{str(self)} - {self.tempdir.name}')
 
     def tearDown(self):
         self.tempdir.cleanup()
-        super(InitTest, self).tearDown()
+        super().tearDown()
 
     @patch('pathlib.Path.home')
     def test_init(self, home):
@@ -1001,13 +1058,10 @@ class InitTest(unittest.TestCase):
         self.assertEqual(app.input_folder, app.output_folder)
         self.assertTrue(app.verbose, "Verbose is not True")
         self.assertTrue(app.do_convert, "Conversion are not True")
-        self.assertFalse(app.recreate, "Recreate is not false")
         self.assertTrue(app.do_convert)
-        self.assertFalse(app.recreate)
         self.assertFalse(app.force_keep)
         self.assertFalse(app.keep_duplicates)
         self.assertFalse(app.keep_movie_clips)
-        self.assertFalse(app.process_all_files)
         self.assertFalse(app.keep_converted_files)
         self.assertTrue(app.keep_original_files, "Keep original default is not True")
         self.assertListEqual(app.ignore_folders, [], "Ignore folders list is not empty")
@@ -1026,13 +1080,13 @@ class InitTest(unittest.TestCase):
         app.stop()
 
     @patch('pathlib.Path.home')
-    def test_save_and_restore(self, home):   # pylint: disable=too-many-statements
+    def test_save_and_restore(self, home):  # pylint: disable=too-many-statements
 
         home.return_value = Path(self.tempdir.name)
 
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             app = ImageClean('test_app', restore=True)
-            error_value = f'DEBUG:Cleaner:Restore attempt of'
+            error_value = 'DEBUG:Cleaner:Restore attempt of'
             self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'Restore Fails')
             # default value
             self.assertEqual(app.app_name, 'test_app', "Failed to set the app name")
@@ -1041,9 +1095,7 @@ class InitTest(unittest.TestCase):
             self.assertEqual(app.input_folder, app.output_folder)
             self.assertTrue(app.verbose, "Verbose is not True")
             self.assertTrue(app.do_convert, "Conversion are not True")
-            self.assertFalse(app.recreate, "Recreate is not false")
             self.assertTrue(app.do_convert)
-            self.assertFalse(app.recreate)
             self.assertFalse(app.keep_duplicates)
             self.assertFalse(app.keep_movie_clips)
             self.assertFalse(app.keep_converted_files)
@@ -1055,7 +1107,6 @@ class InitTest(unittest.TestCase):
             app.output_folder = Path('/output')
             app.verbose = False
             app.do_convert = False
-            app.set_recreate(True)
             app.set_keep_original_files(False)
             app.set_keep_duplicates(True)
             app.set_keep_movie_clips(True)
@@ -1076,9 +1127,7 @@ class InitTest(unittest.TestCase):
         self.assertEqual(app.output_folder, Path('/output'))
         self.assertFalse(app.verbose, "Verbose is not True")
         self.assertFalse(app.do_convert, "Conversion are not True")
-        self.assertTrue(app.recreate, "Recreate is not false")
         self.assertFalse(app.do_convert)
-        self.assertTrue(app.recreate)
         self.assertTrue(app.keep_duplicates)
         self.assertTrue(app.keep_movie_clips)
         self.assertTrue(app.keep_converted_files)
@@ -1105,8 +1154,9 @@ class InitTest(unittest.TestCase):
         self.assertFalse(app.keep_original_files)
         app.stop()
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_prepare(self, home):
+    async def test_prepare(self, home):
         home.return_value = Path(self.tempdir.name)
         output_folder = Path(self.tempdir.name).joinpath('output')
         input_folder = Path(self.tempdir.name).joinpath('input')
@@ -1121,23 +1171,19 @@ class InitTest(unittest.TestCase):
 
         os.chmod(output_folder, mode=stat.S_IREAD)  # set to R/O
         with pytest.raises(AssertionError):  # Must assert with R/O output folder
-            app.run()
+            await app.run()
 
         os.chmod(output_folder, mode=stat.S_IRWXU)  # Rest output
         os.chmod(input_folder, mode=stat.S_IREAD)  # Set input to R/O
 
-        app.run()
+        await app.run()
         self.assertTrue(app.force_keep, 'Force Keep is set')
         self.assertEqual(len(app.ignore_folders), 4)
         self.assertEqual(len(app.bad_parents), 5)
 
         app.input_folder = app.output_folder
-        app.set_recreate(True)
-        with pytest.raises(AssertionError):  # Must assert if trying to recreate the input folder
-            app.run()
 
-        app.set_recreate(False)
-        app.run()
+        await app.run()
         self.assertTrue(app.in_place, 'In place is not set')
         self.assertIsNone(app.duplicate_path)
         self.assertIsNone(app.migrated_path)
@@ -1148,7 +1194,7 @@ class InitTest(unittest.TestCase):
         app.set_keep_movie_clips(True)
         app.set_keep_duplicates(True)
         app.set_keep_converted_files(True)
-        app.run()
+        await app.run()
         self.assertIsNotNone(app.duplicate_path)
         self.assertIsNotNone(app.migrated_path)
         self.assertIsNotNone(app.image_movies_path)
@@ -1160,30 +1206,33 @@ class InitTest(unittest.TestCase):
         self.assertFalse(app.no_date_path.exists(), 'No_Date path does not exist')
         self.assertFalse(app.small_path.exists(), 'Small path does not exist')
 
-    @freeze_time("1961-09-27 19:21:34")
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_prepare_rollover(self, home):
+    async def test_prepare2(self, home):
         home.return_value = Path(self.tempdir.name)
-        output_folder = Path(self.tempdir.name).joinpath('output')
+        output_folder = Path(self.tempdir.name).joinpath('output2')
         input_folder = Path(self.tempdir.name).joinpath('input')
 
-        os.mkdir(output_folder)
         os.mkdir(input_folder)
 
         app = ImageClean('test_app')
         app.output_folder = output_folder
         app.input_folder = input_folder
-        app.set_recreate(True)
         app.verbose = False
+        await app.run()
+        self.assertTrue(output_folder.exists(), 'Output folder was created')
 
-        rolled_over = Path(f'{output_folder}_1961-09-27-19-21-34')
-        self.assertFalse(rolled_over.exists())
+    @pytest.mark.asyncio
+    @patch('pathlib.Path.home')
+    async def test_prepare3(self, home):
+        home.return_value = Path(self.tempdir.name)
+        app = ImageClean('test_app', output=Path(self.tempdir.name).joinpath('output'))
+        await app.prepare()
+        self.assertTrue(app.small_path.exists())
+        app.stop()
 
-        app.run()
-        self.assertTrue(rolled_over.exists())
 
-
-class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attributes
+class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-many-instance-attributes
     """
     These are test cases not covered in Actual Scenarios or Initialization
     """
@@ -1191,15 +1240,16 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
     def tearDown(self):
         self.temp_base.cleanup()
         Cleaner.clear_caches()
-        super(EdgeCaseTest, self).tearDown()
+        super().tearDown()
 
     def setUp(self):
-        super(EdgeCaseTest, self).setUp()
+        # super(EdgeCaseTest, self).setUp()
+        super().setUp()
         self.my_location = Path(os.path.dirname(__file__))
         self.app_name = 'test_instance'
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with)
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
 
@@ -1210,19 +1260,21 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         self.heic_file = self.my_location.joinpath('data').joinpath('heic_image.HEIC')
         self.jpg_file = self.my_location.joinpath('data').joinpath('jpeg_image.jpg')
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_read_only_input_forces_force_ro(self, home):
+    async def test_read_only_input_forces_force_ro(self, home):
         home.return_value = Path(self.temp_base.name)
         orig = copy_file(self.jpg_file, self.input_folder)
         os.chmod(self.input_folder, mode=(stat.S_IREAD | stat.S_IEXEC))  # Set input to R/O
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.set_keep_original_files(False)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
         self.assertTrue(orig.exists())
 
+    @pytest.mark.asyncio
     @patch('pathlib.Path.home')
-    def test_bad_parents(self, home):
+    async def test_bad_parents(self, home):
         home.return_value = Path(self.temp_base.name)
 
         orig = copy_file(self.jpg_file, self.input_folder.joinpath('Kathy_Nick'))
@@ -1230,30 +1282,32 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.add_bad_parents('Kathy_Nick')
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(orig.name).exists())
 
+    @pytest.mark.asyncio
     @patch('builtins.print')
     @patch('pathlib.Path.home')
-    def test_invalid(self, home, my_print):
+    async def test_invalid(self, home, my_print):
         home.return_value = Path(self.temp_base.name)
 
         name = self.input_folder.joinpath('text.jpg')
-        my_file = open(name, 'w+')
+        my_file = open(name, 'wb+')
         my_file.close()  # Empty File
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
         my_print.assert_not_called()
 
         cleaner.verbose = True
-        cleaner.run()
+        await cleaner.run()
         my_print.assert_called()
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @pytest.mark.asyncio
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
-    def test_audit_folders(self, home):
+    async def test_audit_folders(self, home):
         home.return_value = Path(self.temp_base.name)
 
         one = copy_file(self.jpg_file, self.input_folder, new_name='one.jpg')
@@ -1266,16 +1320,17 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
         cleaner.set_keep_movie_clips(True)
         cleaner.set_keep_duplicates(True)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
         self.assertTrue(one.exists())
         self.assertTrue(two.exists())
         self.assertTrue(output_path.joinpath(one.name).exists(), 'Image one processed')
         self.assertTrue(output_path.joinpath(two.name).exists(), 'Image two processed')
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @pytest.mark.asyncio
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
-    def test_audit_folders_1(self, home):
+    async def test_audit_folders_1(self, home):
         home.return_value = Path(self.temp_base.name)
 
         copy_file(self.jpg_file, self.output_folder.joinpath(DIR_SPEC), new_name='one.jpg')
@@ -1283,12 +1338,13 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @pytest.mark.asyncio
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
-    def test_audit_folders_2(self, home):
+    async def test_audit_folders_2(self, home):
         home.return_value = Path(self.temp_base.name)
 
         copy_file(self.jpg_file, self.output_folder.joinpath(DIR_SPEC), new_name='one.jpg')
@@ -1297,9 +1353,40 @@ class EdgeCaseTest(unittest.TestCase):  # pylint: disable=too-many-instance-attr
 
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
-        cleaner.run()
+        await cleaner.run()
         self.assertEqual(len(cleaner.suspicious_folders), 1, 'Large folders')
+
+
+class PathTest(unittest.TestCase):  # pylint: disable=too-many-instance-attributes
+    def tearDown(self):
+        self.temp_base.cleanup()
+        Cleaner.clear_caches()
+        super().tearDown()
+
+    def setUp(self):
+        # super(EdgeCaseTest, self).setUp()
+        super().setUp()
+        self.app_name = 'test_instance'
+
+        # Make basic folders
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with)
+        self.output_folder = Path(self.temp_base.name).joinpath('Output')
+        self.input_folder = Path(self.temp_base.name).joinpath('Input')
+        os.mkdir(self.input_folder)
+
+    @patch('pathlib.Path.home')
+    def test_paths1(self, home):
+        home.return_value = Path(self.temp_base.name)
+        file = file_cleaner(create_image_file(self.input_folder, date=DATE_SPEC), None)
+        cleaner = ImageClean(app=self.app_name, restore=False)
+        cleaner.input_folder = self.input_folder
+        cleaner.output_folder = self.output_folder
+        new_path = cleaner._get_new_path(file)
+        self.assertEqual(new_path, self.output_folder.joinpath(DIR_SPEC), 'DateBased path')
+
+
 
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()
+

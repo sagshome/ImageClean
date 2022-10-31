@@ -21,8 +21,8 @@ from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 # todo: This is to get around import errors.   WHY !
-from Backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position
-from Backend.image_clean import ImageClean  # pylint: disable=wrong-import-position
+from backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position
+from backend.image_clean import ImageClean  # pylint: disable=wrong-import-position
 
 
 APP_PATH = Path(sys.argv[0])
@@ -37,8 +37,6 @@ APP_HELP = f'{APP_NAME} -hdmsaruPV -i <ignore_folder>... -n <non_description_fol
            f'\n-d: Save duplicate files into {APP.duplicate_path_base}' \
            f'\n-m: Save movie-clips that are images (iphone live picture movies) into {APP.image_movies_path_base}' \
            f'\n-c: Save original images that were successfully converted (HEIC) to JPG into {APP.migrated_path_base}' \
-           f'\n-a: Process all files,   ignore anything that is not an image' \
-           f'\n-r: Recreate the output folder (not valid without -o)' \
            f'\n-s: safe import, keep original files when processed'\
            f'\n-P: Paranoid,  -d, -m, -j, -s -x' \
            f'\n-V: Verbose,  bather on to stdout' \
@@ -99,14 +97,10 @@ if __name__ == '__main__':
         if opt == '-h':
             print(APP_HELP)
             sys.exit(2)
-        elif opt == '-r':
-            APP.set_recreate(True)
         elif opt == '-d':
             APP.set_keep_duplicates(True)
         elif opt == '-m':
             APP.set_keep_movie_clips(True)
-        elif opt == '-a':
-            APP.process_all_files = True
         elif opt == '-c':
             APP.set_keep_converted_files(True)
         elif opt == '-s':

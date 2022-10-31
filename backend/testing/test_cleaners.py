@@ -3,6 +3,8 @@
 # pylint: disable=missing-class-docstring
 # pylint: disable=missing-function-docstring
 # pylint: disable=too-many-public-methods
+# pylint: disable=duplicate-code
+
 
 """
 Test cases in this file process actual images,  I was going to MOCK everything but in the end I opted to exercise the
@@ -22,14 +24,13 @@ from pathlib import Path
 from unittest.mock import patch
 from unittest import TestCase
 
-from Backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
-    file_cleaner, duplicate_hash, root_path_list, PICTURE_FILES, MOVIE_FILES
-from Utilities.test_utilities import copy_file, create_file, set_date, \
+from backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
+    file_cleaner, files, root_path_list, PICTURE_FILES, MOVIE_FILES
+from Utilities.test_utilities import create_image_file, copy_file, create_file, set_date, \
     DATE_SPEC, DIR_SPEC
 
 sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack, venv doesn't work real well
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-
 
 
 class CleanerUtilsTest(unittest.TestCase):
@@ -45,7 +46,7 @@ class CleanerUtilsTest(unittest.TestCase):
             self.assertEqual('ImageCleaner', my_object.__class__.__name__,
                              f'{my_object.path} Expected ImageCleaner Object - got {my_object.__class__.__name__}')
 
-        my_object = file_cleaner(Path(f'/fake/foo.text'), None)
+        my_object = file_cleaner(Path('/fake/foo.text'), None)
         self.assertEqual('FileCleaner', my_object.__class__.__name__,
                          f'{my_object.path} Expected FileCleaner Object - got {my_object.__class__.__name__}')
 
@@ -70,21 +71,21 @@ class CleanersInitTest(TestCase):
 class Cleaners(TestCase):
 
     def setUp(self):
-        super(Cleaners, self).setUp()
+        super().setUp()
         # define standard files
         self.my_location = Path(os.path.dirname(__file__))
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
         os.mkdir(self.output_folder)
         os.mkdir(self.input_folder)
 
         Cleaner.clear_caches()
-        self.root_folder = FolderCleaner(self.input_folder,
-                                         root_folder=self.input_folder,
-                                         output_folder=self.output_folder)
+        self.root_folder = FolderCleaner(self.input_folder)
+        self.root_folder.add_to_root_path(self.input_folder)
+        self.root_folder.add_to_root_path(self.output_folder)
         self.root_folder.description = None
 
         self.migration_base = Path(self.temp_base.name)
@@ -92,13 +93,13 @@ class Cleaners(TestCase):
 
     def tearDown(self):
         self.temp_base.cleanup()
-        super(Cleaners, self).tearDown()
+        super().tearDown()
 
 
 class CleanerTests(Cleaners):
 
     def setUp(self):
-        super(CleanerTests, self).setUp()
+        super().setUp()
         self.file1 = Cleaner(create_file(self.input_folder.joinpath('a.file')), None)
         self.file2 = Cleaner(create_file(self.input_folder.joinpath('b.file')), None)
 
@@ -163,19 +164,25 @@ class ImageCleanerTests(Cleaners):
         No need to tearDown since super will clean up input directory
         :return:
         """
-        super(ImageCleanerTests, self).setUp()
+        super().setUp()
 
-        self.small_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('small_image.jpg'), self.input_folder), None)
-        self.heic_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('heic_image.HEIC'), self.input_folder), None)
-        self.jpg_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('jpeg_image.jpg'), self.input_folder), None)
+        self.small_obj = ImageCleaner(create_image_file(self.input_folder.joinpath('small_image.jpg'), date=DATE_SPEC, small=True), None)
+        self.heic_obj = ImageCleaner(copy_file(self.my_location.joinpath('data').joinpath('heic_image.HEIC'), self.input_folder), None)
+        self.jpg_obj = ImageCleaner(create_image_file(self.input_folder.joinpath('jpeg_image.jpg'), date=DATE_SPEC, small=False), None)
 
     def test_date_no_date(self):
+        no_date = ImageCleaner(create_image_file(self.input_folder, date=None), None)
+        with self.assertLogs('Cleaner', level='DEBUG') as logs:
+            date_value = no_date.get_date_from_image()
+            self.assertTrue(logs.output[0].startswith('DEBUG:Cleaner:Could not find a date in'))
+            self.assertIsNone(date_value, 'Image time should be None')
+
+    @patch('piexif.load')
+    def test_invalid_data(self, load_value):
+        load_value.return_value = None
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             date_value = self.jpg_obj.get_date_from_image()
-            self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Could not find a date in {self.jpg_obj.path}')
+            self.assertTrue(logs.output[0].startswith('DEBUG:Cleaner:Could not find a date in'))
             self.assertIsNone(date_value, 'Image time should be None')
 
     def test_date_date(self):
@@ -276,7 +283,7 @@ class ImageCleanerTests(Cleaners):
 
         self.assertEqual(0, len(self.jpg_obj.get_all_registered()), 'Get all reg.  should have 0 elements')
 
-        self.assertEqual(duplicate_hash, {}, 'Nothing registered')
+        self.assertEqual(files, {}, 'Nothing registered')
         self.assertFalse(self.jpg_obj.is_registered())
         self.jpg_obj.register()
         self.assertEqual(1, len(self.jpg_obj.get_all_registered()), 'Get all reg.  should have 1 elements')
@@ -286,9 +293,9 @@ class ImageCleanerTests(Cleaners):
             self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to re_register'), 'Failed to log error')
 
         self.assertTrue(self.jpg_obj.is_registered())
-        self.assertEqual(len(duplicate_hash), 1, 'Something registered')
+        self.assertEqual(len(files), 1, 'Something registered')
         self.jpg_obj.de_register()
-        self.assertEqual(len(duplicate_hash), 0, 'Nothing registered')
+        self.assertEqual(len(files), 0, 'Nothing registered')
         self.assertFalse(self.jpg_obj.is_registered())
 
         # test2 multiple copies
@@ -300,8 +307,8 @@ class ImageCleanerTests(Cleaners):
 
         self.jpg_obj.register()
         new_obj.register()
-        self.assertEqual(len(duplicate_hash), 1, 'Hash should only have one element')
-        self.assertEqual(len(duplicate_hash[new_obj.registry_key]), 2, 'Two elements (same key')
+        self.assertEqual(len(files), 1, 'Hash should only have one element')
+        self.assertEqual(len(files[new_obj.registry_key]), 2, 'Two elements (same key')
 
         self.assertTrue(self.jpg_obj.is_registered())
         self.assertTrue(new_obj.is_registered())
@@ -310,8 +317,8 @@ class ImageCleanerTests(Cleaners):
 
         # test3  - De-register one of the copies
         new_obj.de_register()
-        self.assertEqual(len(duplicate_hash), 1, 'Hash should only have one element')
-        self.assertEqual(len(duplicate_hash[new_obj.registry_key]), 1, 'One elements (same key')
+        self.assertEqual(len(files), 1, 'Hash should only have one element')
+        self.assertEqual(len(files[new_obj.registry_key]), 1, 'One elements (same key')
 
         # test4 - Lookup with various path options
         self.assertTrue(new_obj.is_registered(), 'Test True by name')
@@ -475,7 +482,7 @@ class ImageCleanerTests(Cleaners):
         mock_system.return_value = 'Windows'
         with self.assertLogs('Cleaner', level='ERROR') as logs:
             new = self.heic_obj.convert(self.run_base, None, remove=False)
-            error_value = f'ERROR:Cleaner:Conversion from HEIC is not supported on Windows'
+            error_value = 'ERROR:Cleaner:Conversion from HEIC is not supported on Windows'
             self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'windows HEIC')
             self.assertEqual(new, self.heic_obj)
 
@@ -536,7 +543,7 @@ class FileTests(Cleaners):
 class FolderTests(Cleaners):
 
     def setUp(self):
-        super(FolderTests, self).setUp()
+        super().setUp()
         self.custom_dir1 = FolderCleaner(self.input_folder.joinpath('custom1'))
         self.custom_dir2 = FolderCleaner(self.input_folder.joinpath('custom2'))
         self.date_dir1 = FolderCleaner(self.input_folder.joinpath(DIR_SPEC))
