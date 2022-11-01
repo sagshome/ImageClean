@@ -77,12 +77,11 @@ def calculate_size(path, which):
 
 
 def run_application():
-    master = FolderCleaner(cleaner_app.input_folder,
-                           parent=None,
-                           root_folder=cleaner_app.input_folder,
-                           output_folder=cleaner_app.output_folder)
+    master = FolderCleaner(cleaner_app.input_folder, parent=None)
 
     master.description = None
+    master.add_to_root_path(cleaner_app.input_folder)
+    master.add_to_root_path(cleaner_app.output_folder)
     cleaner_app.run()
     # root_folder=cleaner_app.no_date_path))
     # suspicious_folders = cleaner_app.audit_folders(cleaner_app.output_folder)
@@ -492,13 +491,11 @@ class ImageCleanApp(App):
 
 if __name__ == '__main__':
 
-    #my_app = ImageCleanApp()
-    #LOOP.run_until_complete(
-    #    async_runTouchApp(my_app, async_lib='asyncio')
-    #)
-
     my_app = ImageCleanApp()
-    my_app.run()
+    LOOP.run_until_complete(async_runTouchApp(my_app, async_lib='asyncio'))
+
+    #my_app = ImageCleanApp()
+    #my_app.async_run()
     print('foobar')
 
     #ImageCleanApp().run()

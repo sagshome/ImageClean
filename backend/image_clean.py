@@ -113,7 +113,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 for value in kwargs[key]:
                     self.bad_parents.append(value)
             else:
-                assert False, f'Invalid option supplied: {key}'  # pragma: no cover
+                logger.error('Invalid option supplied: %s', key)  # pragma: no cover
 
     def save_config(self):
         """
