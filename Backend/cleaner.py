@@ -54,17 +54,14 @@ def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageC
     """
     if file.is_dir():
         key = str(file)
-        print(f'{datetime.now()} - Dir {key}')
 
         if key not in folders:
             folders[key] = FolderCleaner(file, parent=folder)
         return folders[key]
     suffix = file.suffix.lower()
     if suffix in PICTURE_FILES or suffix in MOVIE_FILES:
-        print(f'{datetime.now()} - File {file}')
 
         return ImageCleaner(file, folder)
-    print(f'{datetime.now()} - Other {file}')
 
     return FileCleaner(file, folder)
 

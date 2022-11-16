@@ -244,7 +244,6 @@ class ImageClean:
         For the GUI,  we need a way to 'prepare' the environment
         :return:
         """
-        print(f'{datetime.now()} - starting prepare')
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
@@ -281,10 +280,8 @@ class ImageClean:
         # Backup any previous attempts
 
         if not self.recreate or self.in_place:  # Same root or importing from a new location
-            print(f'{datetime.now()} - register files')
 
             self.register_files(self.output_folder)
-            print(f'{datetime.now()} - Done register files')
 
         if self.recreate:
             if self.output_folder.exists():
@@ -304,7 +301,6 @@ class ImageClean:
             os.mkdir(self.small_path)
 
         Cleaner.add_to_root_path(self.no_date_path)
-        print(f'{datetime.now()} - ending prepare')
 
     def stop(self):
         """
@@ -395,6 +391,8 @@ class ImageClean:
                 for outer in range(len(entries[entry])):
                     this = entries[entry][outer]
                     if this:
+                        if str(this.path).startswith(str(self.duplicate_path)):
+                            continue  # This is already flagged as a duplicate
                         new_path = self.get_new_path(this)
                         if this.path.parent == new_path:  # I am still in the right place
                             for inner in range(outer + 1, len(entries[entry])):
@@ -517,7 +515,6 @@ class ImageClean:
         """
         await asyncio.sleep(0)
         self.print(f'.. File: {entry.path}')
-        print(f'.. File: {entry.path}')
 
         self.increment_progress()
 
