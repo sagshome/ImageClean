@@ -11,7 +11,7 @@
     callback: None
     check_value: False
     size_hint: 1.0, None
-    height: 50
+    # height: 50
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
@@ -29,6 +29,23 @@
             valign: 'center'
             text: root.text
 
+<RadioBoxItem>:
+    text: ''
+    callback: None
+    check_value: False
+    BoxLayout:
+        orientation: 'horizontal'
+        Label:
+            id: RB_Label
+            texture_size: self.size
+            text_size: self.size
+            halign: 'left'
+            valign: 'center'
+            text: root.text
+        CheckBox:
+            id: RB_CheckBox
+            group: True
+
 <FolderSelector>:
     show_clear: 0
     input_button_text: ''
@@ -45,29 +62,27 @@
             text: root.input_button_text
             background_color: utils.get_color_from_hex('#E9F20D')
             width: 100
-            size_hint: 0.75, 1.0
+            size_hint: 0.3, 1.0
             #pos_hint: {'center': 1}
             on_press: root.show_load()
-        ScrollView:
-            do_scroll_x: False
-            do_scroll_y: root.default_scrolling
-            Label:
-                text: root.input_label_value
-                height: self.texture_size[1]
-                text_size: self.width, None
-
-                size_hint_y: None
-                valign: 'center'
-                padding: 10, 15
+        Label:
+            id: label_value
+            text: root.input_label_value
+            height: self.texture_size[1]
+            text_size: self.width, None
+            size_hint_y: None
+            valign: 'center'
+            padding: 10, 15
         Button:
-            opacity: root.show_clear
-            text: "Clear"
-            size_hint: 0.2, 1.0
+            id: Drives
+            opacity: root.have_drives()
+            text: "Change Drive"
+            size_hint: 0.3, 1.0
             background_color: utils.get_color_from_hex('#99CCFF')
-            on_press: root.clear_callback()
+            on_press: root.change_drives()
 
 <ActionBox>:
-    #size_hint: 1.0, .2
+    size_hint: 1.0, .1
     orientation: 'horizontal'
     Button:
         text: "Go"
@@ -81,67 +96,47 @@
 <Main>:
     orientation: 'vertical'
     BoxLayout:
+        size_hint_y: .1
         orientation: 'horizontal'
-        size_hint_y: .2
         Button:
             text: 'Help'
             background_color: utils.get_color_from_hex('#00FF00')
-            size_hint: 0.3, 1.0
+            size_hint_x: 0.3
             on_press: root.help()
-        Button:
-            text: ''
-            opacity: 0
+        Label:
+            text: "Welcome to Photo Manager,   photo storage,  Simplified"
         Button:
             background_color: utils.get_color_from_hex('#00FF00')
             text: 'About'
             size_hint_x: 0.3
             on_press: root.about()
-
     FolderSelector:
-        input_button_text: 'Select Images Folder'
+        id: input_folder
+        size_hint_y: .15
+        input_button_text: 'Import Images From:'
+        get_label_value: self.get_input()
+        load_callback: self.set_input
+        show_new_button: 0
+    FolderSelector:
+        id: output_folder
+        size_hint_y: .15
+        input_button_text: 'Save Images To:'
         get_label_value: self.get_output()
         load_callback: self.set_output
         show_new_button: 1
-    FolderSelector:
-        input_button_text: 'Import Images Folder'
-        get_label_value: self.get_input()
-        load_callback: self.set_input
     CheckBoxItem:
+        size_hint_y: .15
         text: "Keep Originals - Don't remove original files!"
         check_value: True
         callback: self.set_keep_originals
-    CheckBoxItem:
-        text: "Save suspect files - Duplicates/Movie Clips/Converted images!"
-        check_value: False
-        callback: self.set_keep_others
-    CheckBoxItem:
-        text: "Look for small files - Old thumbnails,  will cause all files to be read."
-        check_value: False
-        callback: self.set_process_small
-    FolderSelector:
-        size_hint_y: 1
-        default_scrolling: True
-        show_clear: 1
-        clear_callback: self.clear_skip_name
-        input_button_text: 'Folder names to ignore'
-        get_label_value: self.get_skip_name()
-        load_callback: self.set_skip_name
-        allow_multiselect: True
-    FolderSelector:
-        size_hint_y: 1
-        default_scrolling: True
-        show_clear: 1
-        clear_callback: self.clear_ignore_folder
-        input_button_text: 'Input Folders to ignore'
-        get_label_value: self.get_ignore_folder()
-        load_callback: self.set_ignore_folder
-        allow_multiselect: True
+    Progress:
+        id: Progress
     ActionBox:
-        size_hint_y: 0.25
+        id: ActionBox
+        size_hint_y: 0.15
 
 <Progress>:
     progress_bar: progress_bar
-    progress_summary: progress_summary
     progress_text: progress_text
     exit_button: exit_button
     BoxLayout:
@@ -149,7 +144,7 @@
         size: root.width, root.height
         Label:
             size_hint_y:.05
-            halign: 'center'
+            # halign: 'center'
             text: "Progress"
         ProgressBar:
             id: progress_bar
@@ -157,14 +152,8 @@
             pos_hint: {'x': .1}
             size_hint_x: .8
             size_hint_y: .1
-        BoxLayout:
+        TextInput:
             id: progress_text
-            orientation: 'horizontal'
-            TextInput:
-                size_hint_x: .4
-                id: progress_summary
-            TextInput:
-                id: progress_text
         Button:
             id: exit_button
             size_hint_y: .1
@@ -187,6 +176,9 @@
             background_color: utils.get_color_from_hex('#0E2BF1')
             on_release:
                 root.dismiss()
+
+<DriveDialog>:
+
 
 <LoadDialog>:
     filechooser: file_chooser

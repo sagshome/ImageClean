@@ -14,8 +14,8 @@ from pathlib import Path
 
 class DataClass:
     def __init__(self):
-        self.input = '/home/msargent'
-        self.output = '/shared/pout'
+        self.input = None
+        self.output = None
         self.ignore = []
         self.skip = []
         self.checked = False
@@ -23,6 +23,24 @@ class DataClass:
 
 data = DataClass()
 
+def dismiss_dialog(title, text):
+    content = DismissDialog(text)
+    _popup = Popup(title=title, content=content, size_hint=(0.9, 0.9))
+    content.popup = _popup
+    _popup.open()
+
+
+class DismissDialog(BoxLayout):
+
+    error_text = StringProperty()
+
+    def __init__(self, message=None, **kwargs):
+        super(DismissDialog, self).__init__(**kwargs)
+        self.error_text = message
+        self.popup = None
+
+    def dismiss(self):
+        self.popup.dismiss()
 
 class CheckBoxItem(BoxLayout):
     '''
@@ -110,12 +128,12 @@ class FolderSelector(BoxLayout):
                            f"before you make a new 'child' folder\n")
 
     def get_input(self):
-        value = data.input if data.input else '/home'
+        value = data.input if data.input else str(Path.home())
         self.input_label_value = value
         return value
 
     def get_output(self):
-        value = data.output if data.output else '/home'
+        value = data.output if data.output else str(Path.home())
         self.input_label_value = value
         return value
 
@@ -152,9 +170,12 @@ class LoadDialog(FloatLayout):
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
     new = ObjectProperty(None)
+    Drive = ObjectProperty(None)
 
 
 class Main(BoxLayout):
+    def __init__(self):
+        self.drives = get_
     pass
 
 

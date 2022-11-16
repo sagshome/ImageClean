@@ -57,35 +57,32 @@
 
 <Main>:
     orientation: 'vertical'
+    Label:
+        size_hint: 1.0, 0.1
+        text: "Welcome to Photo Manager,   photo storage,  Simplified"
     FolderSelector:
-        input_button_text: 'Select Input Folder'
+        size_hint: 1.0, 0.1
+        input_button_text: 'Importing From:'
         get_label_value: self.get_input()
         show_new_button: 0
-    FolderSelector:
-        input_button_text: 'Change Output Folder'
-        get_label_value: self.get_output()
-    FolderSelector:
-        size_hint: 1.0, 0.3
-        input_button_text: 'Input folders to ignore'
-        get_label_value: self.get_ignore()
-        show_new_button: 0
-        load_callback: self.set_ignore
-        allow_multiselect: True
-    FolderSelector:
-        size_hint: 1.0, 0.3
-        input_button_text: 'Folder names to ignore'
-        get_label_value: self.get_ignore()
-        show_new_button: 0
-        load_callback: self.set_ignore
-        allow_multiselect: True
-    CheckBoxItem:
-        text: 'Check this buddy'
-        callback: self.set_buddy
-        check_value: self.get_buddy()
-    CheckBoxItem:
-        text: 'Check this sam'
-        callback: self.set_sam
-        check_value: self.get_sam()
+    Button:
+        size_hint: 1.0, 0.8
+        visible: False
+        id: "spacer"
+    #FolderSelector:
+    #    input_button_text: 'Importing To:'
+    #    get_label_value: self.get_output()
+
+    #CheckBoxItem:
+    #    text: 'Keep Originals'
+    #    callback: self.set_buddy
+    #    check_value: self.get_buddy()
+    #    visible: false
+
+    #CheckBoxItem:
+    #    text: 'Keep Duplicates'
+    #    callback: self.set_sam
+    #    check_value: self.get_sam()
 
 <LoadDialog>:
     filechooser: file_chooser

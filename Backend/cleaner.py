@@ -54,11 +54,18 @@ def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageC
     """
     if file.is_dir():
         key = str(file)
+        print(f'{datetime.now()} - Dir {key}')
+
         if key not in folders:
             folders[key] = FolderCleaner(file, parent=folder)
         return folders[key]
-    if file.suffix.lower() in PICTURE_FILES or file.suffix.lower() in MOVIE_FILES:
+    suffix = file.suffix.lower()
+    if suffix in PICTURE_FILES or suffix in MOVIE_FILES:
+        print(f'{datetime.now()} - File {file}')
+
         return ImageCleaner(file, folder)
+    print(f'{datetime.now()} - Other {file}')
+
     return FileCleaner(file, folder)
 
 
@@ -140,12 +147,12 @@ class Cleaner:
             target = parsed.groups()[0]
         return target
 
-    def register(self):
+    def register(self, deep=True):
         """
         Register the existence of a file
         :return:
         """
-        if self.is_registered(by_path=True, by_file=True):
+        if self.is_registered(by_path=True, by_file=deep):
             logger.error('Trying to re_register %s', self.path)
         else:
             key = self.registry_key

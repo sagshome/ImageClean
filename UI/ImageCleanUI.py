@@ -3,15 +3,17 @@ import logging
 import os
 import platform
 import sys
-from multiprocessing import Process, Value, Queue
+from multiprocessing import Value, Queue
 import types
 
 from pathlib import Path
-from time import sleep  # Hangs head in shame
+from time import sleep
 
 from kivy.clock import Clock
-from kivy.app import App, async_runTouchApp
+from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.checkbox import CheckBox
 from kivy.uix.textinput import TextInput
 from kivy.uix.floatlayout import FloatLayout
 from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, NumericProperty
@@ -20,6 +22,7 @@ from kivy.uix.widget import Widget
 
 from Backend.cleaner import FileCleaner, FolderCleaner
 from Backend.image_clean import ImageClean
+# from Backend.faker import ImageClean
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
@@ -28,12 +31,12 @@ run_path = Path(Path.home().joinpath(f'.{application_name}'))
 os.mkdir(run_path) if not run_path.exists() else None
 
 log_file = run_path.joinpath('logfile')
-# results_file = run_path.joinpath(f'{application_name}.results')
-#
-# if results_file.exists():
-#     results_file.unlink()
-#     #FileCleaner.rollover_name(results_file)
-# RESULTS = open(results_file, "w+")
+results_file = run_path.joinpath(f'{application_name}.results')
+
+if results_file.exists():
+    results_file.unlink()
+    FileCleaner.rollover_name(results_file)
+RESULTS = open(results_file, "w+")
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_name(log_file)
@@ -53,6 +56,9 @@ mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
 mp_print_queue = Queue()
 
+input_count_task: asyncio.Task
+output_count_task: asyncio.Task
+
 if debugging:
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
@@ -61,29 +67,69 @@ if debugging:
 else:
     logger.setLevel(level=logging.ERROR)
 
-LOOP = asyncio.get_event_loop()
+
+def get_drives() -> dict:
+    """
+    On Windows systems return any drives,  this is not needed on Unix since we can navigate around from /
+    :return:
+    """
+    drives = {}
+    if platform.system() == 'Windows':
+        import win32api
+
+        for letter in [i for i in win32api.GetLogicalDriveStrings().split('\x00') if i]:
+            data = win32api.GetVolumeInformation(f'{letter}\\')
+            drives[letter] = data[0] if data[0] else 'Local Disk'
+    return drives
 
 
 def calculate_size(path, which):
+    from datetime import datetime
     which.value = -1  # -1 is a test for uninitialized
     value = 0
     for base, dirs, files in os.walk(path):
         if Path(base) not in cleaner_app.ignore_folders:
             for _ in files:
                 value += 1
-        # else:
-        #    print(f'Ignoring: {base}')
     which.value = value
+    print(f'{datetime.now()} {path}: {which.value}')
 
 
-def run_application():
+async def a_calculate_size(path: Path, which: Value):
+    from datetime import datetime
+    print(f'{datetime.now()} Starting calculation on: {path}')
+    which.value = -1  # -1 is a test for uninitialized
+    value = 0
+    for base, dirs, files in os.walk(path):
+        if Path(base) not in cleaner_app.ignore_folders:
+            for _ in files:
+                await asyncio.sleep(0)
+                value += 1
+    which.value = value
+    print(f'{datetime.now()} {path}: {which.value}')
+
+
+async def update_label(path: Path, which):
+    from datetime import datetime
+    print(f'{datetime.now()} Starting calculation on: {path}')
+    value = 0
+    for base, dirs, files in os.walk(path):
+        if Path(base) not in cleaner_app.ignore_folders:
+            for _ in files:
+                await asyncio.sleep(0)
+                value += 1
+    which += f' ({value})'
+    print(f'{datetime.now()} {path}: {which.value}')
+
+async def run_application():
     master = FolderCleaner(cleaner_app.input_folder,
                            parent=None,
                            root_folder=cleaner_app.input_folder,
                            output_folder=cleaner_app.output_folder)
 
     master.description = None
-    cleaner_app.run()
+    await cleaner_app.run()
+
     # root_folder=cleaner_app.no_date_path))
     # suspicious_folders = cleaner_app.audit_folders(cleaner_app.output_folder)
     # if suspicious_folders:
@@ -114,35 +160,39 @@ class DismissDialog(BoxLayout):
 
 
 class CheckBoxItem(BoxLayout):
-    '''
+    """
     Provide a get and set function for each checkbox item
-    '''
+    """
 
     def selected(self, checkbox):
         if hasattr(self, 'callback') and self.callback:
             self.callback(checkbox.active)
 
     @staticmethod
-    def set_recreate(touch):
-        cleaner_app.set_recreate(touch)
-        logger.debug(f'recreate is {touch}')
-
-    @staticmethod
     def set_keep_originals(touch):
         cleaner_app.set_keep_original_files(touch)
         logger.debug(f'keep_originals is {touch}')
 
-    @staticmethod
-    def set_keep_others(touch):
-        cleaner_app.set_keep_duplicates(touch)
-        cleaner_app.set_keep_converted_files(touch)
-        cleaner_app.set_keep_movie_clips(touch)
-        logger.debug(f'keep_others is {touch}')
 
-    @staticmethod
-    def set_process_small(touch):
-        #cleaner_app.set_keep_original_files(touch)
-        logger.debug(f'process small is {touch}')
+class RadioBoxItem(BoxLayout):
+    """
+    A group of mutually exclusive options
+
+    """
+
+    def __init__(self, text, check_value, callback, **kwargs):
+        super(RadioBoxItem, self).__init__(**kwargs)
+        self.ids['RB_Label'].text = text
+        self.ids['RB_CheckBox'].active = check_value
+        self.ids['RB_CheckBox'].on_active = callback
+        self.callback = callback
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            if not self.ids['RB_CheckBox'].active:
+                self.ids['RB_CheckBox'].active = True
+                if self.callback:
+                    self.callback(self.ids["RB_Label"].text, True)
 
 
 class LoadDialog(FloatLayout):
@@ -165,15 +215,9 @@ class EnterFolder(TextInput):
 class ActionBox(BoxLayout):
 
     def start_processing(self):
-        if cleaner_app.recreate:
-            mp_output_count.value = 0
         cleaner_app.save_config()
-        main = self.parent
-        main.clear_widgets()
-        main.add_widget(main.progress)
-        Clock.schedule_interval(main.progress.update_progress, 1.0)
-        main.progress.start_application()
-
+        self.parent.ids['Progress'].start_application()
+        self.parent.remove_widget(self.parent.ids['ActionBox'])
 
 class Progress(Widget):
     progress_bar = ObjectProperty(None)
@@ -182,6 +226,8 @@ class Progress(Widget):
     exit_button = ObjectProperty(None)
     bg_process = None
     max_results_size = 5000
+    task = None
+    updates = None
 
     def update_progress(self, _):
         """
@@ -191,81 +237,50 @@ class Progress(Widget):
         :return:
         """
 
+
         # Update progress bar
         self.progress_bar.value = mp_processed_value.value
-        if cleaner_app.recreate:
-            mp_output_count.value = mp_processed_value.value
 
         # Update results text,  we need to truncate since the text box widget can not handle large amounts of data
         # todo: this truncation works but it makes for jumpy text,  maybe we can do better.
         new_text = self.progress_text.text
         while not mp_print_queue.empty():
             new_line = f'{mp_print_queue.get()}\n'
-            # RESULTS.write(new_line)  # This is the full output,  just in case.
+            RESULTS.write(new_line)  # This is the full output,  just in case.
             new_text = f'{new_text}{new_line}'
 
         if len(new_text) > self.max_results_size:
             new_text = new_text[len(new_text)-self.max_results_size:]
         self.progress_text.text = new_text
 
-        if not self.bg_process.is_alive():  # We are complete
+        if self.task and self.task.done():
+            self.updates.cancel()
             self.exit_button.text = 'Exit'  # Change label from Abort to Exit
-            self.parent.calculate_size(cleaner_app.output_folder, mp_output_count)
+            calculate_size(cleaner_app.output_folder, mp_output_count)
             self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
                                          f"Input File Count: {mp_input_count.value}\n" \
                                          f"Output Folder: {cleaner_app.output_folder}\n" \
                                          f"Output File Count: {mp_output_count.value}"
 
-            # self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
-            # RESULTS.close()
-            return False  # Stops this periodic task
+            self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
 
     def start_application(self):
-        # Take up to 30 seconds to see if values are in the background  todo: improve this approach
-        count = 0
-        while mp_input_count.value == -1 or mp_output_count.value == -1:
-            sleep(1)
-            count += 1
-            if count == 30:
-                logger.error(f'Input count {mp_input_count.value} Output count {mp_output_count.value} - Error')
-                break
+
+        calculate_size(cleaner_app.input_folder, mp_input_count)
+        calculate_size(cleaner_app.output_folder, mp_output_count)
+
+        cleaner_app.print = types.MethodType(self.override_print, cleaner_app)
+        cleaner_app.increment_progress = types.MethodType(self.override_progress, cleaner_app)
 
         self.progress_bar.max = mp_input_count.value
-        self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
-                                     f"Input File Count: {mp_input_count.value}\n" \
-                                     f"Output Folder: {cleaner_app.output_folder}\n" \
-                                     f"Output File Count: {mp_output_count.value}"
-
         self.progress_text.text = "Results:\n\n"
-        self.bg_process = Process(target=run_application)
-        self.bg_process.start()
-
-    def run_application(self):
-
-        master = FolderCleaner(cleaner_app.input_folder,
-                               parent=None,
-                               root_folder=cleaner_app.input_folder,
-                               output_folder=cleaner_app.output_folder)
-
-        master.description = None
-        cleaner_app.prepare()
-        cleaner_app.process_folder(master)
-        master.reset()
-        cleaner_app.process_duplicates_movies(FolderCleaner(cleaner_app.no_date_path,
-                                                            root_folder=cleaner_app.no_date_path))
-        suspicious_folders = cleaner_app.audit_folders(cleaner_app.output_folder)
-        if suspicious_folders:
-            self.override_print('_', 'The following folders where found to contain a large number of files,  '
-                                     'thus they are suspicious\n')
-            for folder in suspicious_folders:
-                self.override_print('_', folder)
+        self.task = asyncio.create_task(run_application())
+        self.updates = Clock.schedule_interval(self.update_progress, 1.0)
 
     def abort(self):
-        if self.bg_process and self.bg_process.is_alive():
-            self.bg_process.kill()
-            self.exit_button.text = 'Exit'
-        else:
-            exit(0)
+        if self.task and not self.task.done():
+            self.task.cancel('Aborted')
+        exit(0)
 
     def override_print(self, _, text):
         """
@@ -301,6 +316,7 @@ class FolderSelector(BoxLayout):
         self.content = None
         self.input_label_value = ''
         self.load_base = '/'
+        self.drives = get_drives()
 
     def dismiss_popup(self):
         if self._popup:
@@ -346,87 +362,70 @@ class FolderSelector(BoxLayout):
                            f"This is usually due to a permission problem.    Make sure you actually select a folder\n"
                            f"before you make a new 'child' folder\n")
 
-    # Non Generic Functions
+    def have_drives(self):
+        if len(self.drives) < 2:
+            return 0
+        else:
+            return 1
+
+    def changed_drive(self, value, selected):
+        self.load_base = Path(value).parts[0]
+        self.input_label_value = value
+        self._popup2.dismiss()
+
+    def change_drives(self):
+        self.content = BoxLayout(orientation='vertical')
+        base = Path(self.input_label_value).parts[0]
+        for drive in self.drives:
+            self.content.add_widget(
+                RadioBoxItem(text=f'{drive}{self.drives[drive]}',
+                             check_value=(drive == base),
+                             callback=self.changed_drive)
+            )
+
+        self.content.bind(on_text_validate=self.on_enter)
+        self._popup2 = Popup(title="Select Drive", content=self.content, size_hint=(0.7, 0.5))
+        self._popup2.open()
 
     def get_input(self):
         '''
-        Get(ters) should return the label value for the UI and set self.load_base for future load functions
+        Getters should return the label value for the UI and set self.load_base for future load functions
         :return:
         '''
-        value = str(cleaner_app.input_folder)
-        self.input_label_value = value
-        self.load_base = str(cleaner_app.input_folder.parent)
-        return value
+        value = cleaner_app.input_folder if cleaner_app.input_folder else Path.home()
+        self.input_label_value = str(value)
+        self.load_base = str(value.parent)
+        return str(value)
 
     def set_input(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.input_folder = Path(self.input_label_value)
-        Process(target=calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
+        asyncio.get_event_loop().create_task(a_calculate_size(cleaner_app.input_folder, mp_input_count))
 
     def get_output(self):
-        value = str(cleaner_app.output_folder)
-        self.input_label_value = value
-        self.load_base = str(cleaner_app.output_folder.parent)
-
-        return value
+        value = cleaner_app.output_folder if cleaner_app.output_folder else Path.home()
+        self.input_label_value = str(value)
+        self.load_base = str(value.parent)
+        return str(value)
 
     def set_output(self, path, filename):
         self.input_label_value = os.path.join(path, filename[0])
         cleaner_app.output_folder = Path(self.input_label_value)
-        Process(target=calculate_size, args=(cleaner_app.output_folder, mp_input_count)).start()
-
-    def get_skip_name(self):
-        value = ''
-        for entry in cleaner_app.bad_parents:
-            value += f'{entry}\n'
-        self.input_label_value = value
-        self.load_base = str(cleaner_app.input_folder)
-
-        return value
-
-    def clear_skip_name(self):
-        cleaner_app.bad_parents = []
-        self.input_label_value = self.get_skip_name()
-
-    def set_skip_name(self, path, filename):
-        for path_value in filename:
-            if path_value != path:
-                cleaner_app.bad_parents.append(Path(path_value).name)
-        self.input_label_value = self.get_skip_name()
-
-    def clear_ignore_folder(self):
-        cleaner_app.ignore_folders = []
-        self.input_label_value = self.get_ignore_folder()
-
-    def get_ignore_folder(self):
-        value = ''
-        for entry in cleaner_app.ignore_folders:
-            value += f'{entry}\n'
-        self.input_label_value = value
-        self.load_base = str(cleaner_app.input_folder)
-        return value
-
-    def set_ignore_folder(self, path, filename):
-        for path_value in filename:
-            if path_value != path:
-                cleaner_app.ignore_folders.append(Path(path_value))
-        self.input_label_value = self.get_ignore_folder()
+        asyncio.get_event_loop().create_task(a_calculate_size(cleaner_app.output_folder, mp_output_count))
 
 
 class Main(BoxLayout):
-    input_selector = ObjectProperty(None)
+    # input_selector = ObjectProperty(None)
 
-    def __init__(self, **kwargs):
-        super(Main, self).__init__(**kwargs)
+    input_task = ObjectProperty()
+    output_task = ObjectProperty()
 
-        self.progress = Progress()
+    #def __init__(self, **kwargs):
+    #    super(Main, self).__init__(**kwargs)
 
-        cleaner_app.print = types.MethodType(self.progress.override_print, cleaner_app)
-        cleaner_app.increment_progress = types.MethodType(self.progress.override_progress, cleaner_app)
-        Process(target=calculate_size, args=(cleaner_app.input_folder, mp_input_count)).start()
-        Process(target=calculate_size, args=(cleaner_app.output_folder, mp_output_count)).start()
 
-    def help(self):
+    @staticmethod
+    def help():
         print('foobar')
         dismiss_dialog('Help',
                        f"ImageClean: Organize images based on dates and custom folder names.  The date format is:\n"
@@ -445,34 +444,13 @@ class Main(BoxLayout):
                        f"custom folder name\n"
                        )
 
-    def about(self):
+    @staticmethod
+    def about():
         dismiss_dialog('About',
                        f"This application is provided as is.\n\n"
                        f"Author: Matthew Sargent\n"
                        f"Support: matthew.sargent61@gmail.com\n\n"
-                       #f"Attributions:\n\n"
-                       #f"https://www.vecteezy.com/free-vector/buttons - Buttons Vectors by Vecteezy"
                       )
-
-    def check_recreate(self, touch):
-        cleaner_app.set_recreate(touch)
-        logger.debug(f'recreate is {touch}')
-
-    @staticmethod
-    def get_recreate():
-        return cleaner_app.recreate
-
-    def check_keep_dups(self, touch):
-        cleaner_app.set_keep_duplicates(touch)
-        logger.debug(f'Duplicate is {touch}')
-
-    def check_keep_clips(self, touch):
-        cleaner_app.set_keep_movie_clips(touch)
-        logger.debug(f'Keep Movies is {touch}')
-
-    def check_keep_converted(self, touch):
-        cleaner_app.set_keep_converted_files(touch)
-        logger.debug(f'Keep Converted is {touch}')
 
     def check_keep_original(self, touch):
         cleaner_app.set_keep_original_files(touch)
@@ -485,37 +463,28 @@ class Main(BoxLayout):
         print(f'Exit {self} - value is {value}')
         exit(value)
 
-    def calculate_size(self, path, which):
-        which.value = -1  # -1 is a test for uninitialized
-        value = 0
-        for base, dirs, files in os.walk(path):
-            if Path(base) not in cleaner_app.ignore_folders:
-                for _ in files:
-                    value += 1
-            #else:
-            #    print(f'Ignoring: {base}')
-        which.value = value
-
-    def set_input_folder(self):
-        return 'a value'
-
 
 class ImageCleanApp(App):
-    external_app = cleaner_app
+    drives = []
 
     def build(self):
         return Main()
 
+    def app_func(self):
+        '''This will run both methods asynchronously and then block until they
+        are finished
+        '''
+        # self.other_task = asyncio.ensure_future(self.waste_time_freely())
+
+        async def run_wrapper():
+            # we don't actually need to set asyncio as the lib because it is
+            # the default, but it doesn't hurt to be explicit
+            await self.async_run(async_lib='asyncio')
+        return asyncio.gather(run_wrapper())
+
 
 if __name__ == '__main__':
 
-    #my_app = ImageCleanApp()
-    #LOOP.run_until_complete(
-    #    async_runTouchApp(my_app, async_lib='asyncio')
-    #)
-
-    my_app = ImageCleanApp()
-    my_app.run()
-    print('foobar')
-
-    #ImageCleanApp().run()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(ImageCleanApp().app_func())
+    loop.close()

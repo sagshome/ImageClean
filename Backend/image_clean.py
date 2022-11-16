@@ -1,6 +1,7 @@
 """
 Run the actual image cleaning
 """
+import asyncio
 # pylint: disable=line-too-long
 
 import logging
@@ -243,6 +244,7 @@ class ImageClean:
         For the GUI,  we need a way to 'prepare' the environment
         :return:
         """
+        print(f'{datetime.now()} - starting prepare')
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
@@ -279,7 +281,10 @@ class ImageClean:
         # Backup any previous attempts
 
         if not self.recreate or self.in_place:  # Same root or importing from a new location
+            print(f'{datetime.now()} - register files')
+
             self.register_files(self.output_folder)
+            print(f'{datetime.now()} - Done register files')
 
         if self.recreate:
             if self.output_folder.exists():
@@ -299,6 +304,7 @@ class ImageClean:
             os.mkdir(self.small_path)
 
         Cleaner.add_to_root_path(self.no_date_path)
+        print(f'{datetime.now()} - ending prepare')
 
     def stop(self):
         """
@@ -309,7 +315,7 @@ class ImageClean:
             self.working_folder.cleanup()
             self.working_folder = None
 
-    def run(self):
+    async def run(self):
         """
         This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
@@ -321,8 +327,8 @@ class ImageClean:
                                root_folder=self.input_folder,
                                output_folder=self.output_folder)
         master.description = None  # We need to do this to ensure that this folder name is not used a description
-        self.process_folder(master)
-        self.process_duplicate_files()
+        await self.process_folder(master)
+        await self.process_duplicate_files()
         self.stop()
 
         # Clean up
@@ -343,7 +349,7 @@ class ImageClean:
                 except PermissionError:
                     pass  # This can happen,  just ignore it
             else:
-                file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register()
+                file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register(deep=False)
 
     def folder_test(self, folder1, folder2) -> int:
         """
@@ -376,7 +382,7 @@ class ImageClean:
                 return LESSER
         return EXACT
 
-    def process_duplicate_files(self):
+    async def process_duplicate_files(self):
         """
         Whenever we have multiple files with the same basic name,  we get multiple entry in the registry,  this
         will run an audit on them to make sure that they are still valid duplicates.
@@ -500,7 +506,7 @@ class ImageClean:
             os.makedirs(new)
         return new
 
-    def process_file(self, entry: Union[FileCleaner, ImageCleaner]):  # pylint: disable=too-many-branches
+    async def process_file(self, entry: Union[FileCleaner, ImageCleaner]):  # pylint: disable=too-many-branches
         """
         Perform any conversions
         Extract image date
@@ -509,7 +515,10 @@ class ImageClean:
 
         :param entry: Cleaner object,  promoted to a subclass when processed
         """
-        # self.print(f'.. File: {entry.path}')
+        await asyncio.sleep(0)
+        self.print(f'.. File: {entry.path}')
+        print(f'.. File: {entry.path}')
+
         self.increment_progress()
 
         if not entry.is_valid:
@@ -556,7 +565,7 @@ class ImageClean:
                 self.print(f'.. File: {entry.path} similar copy relocating to {new_path}')
                 entry.relocate_file(new_path, register=True, remove=self.remove_file(entry))
 
-    def process_folder(self, folder: FolderCleaner):
+    async def process_folder(self, folder: FolderCleaner):
         """
         Loop over the folders,  recursive
         :param folder:
@@ -568,9 +577,9 @@ class ImageClean:
                 this_folder = FolderCleaner(Path(entry), parent=folder, app_name=self.app_name)
                 if this_folder.description in self.bad_parents:
                     this_folder.description = None
-                self.process_folder(this_folder)
+                await self.process_folder(this_folder)
             elif entry.is_file():
-                self.process_file(file_cleaner(entry, folder))
+                await self.process_file(file_cleaner(entry, folder))
 
     def remove_file(self, obj: Union[FileCleaner, ImageCleaner]) -> bool:
         """
