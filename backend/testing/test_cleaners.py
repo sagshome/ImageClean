@@ -1,4 +1,5 @@
 # pylint Overrides
+# pylint: disable=duplicate-code
 # pylint: disable=line-too-long
 # pylint: disable=missing-class-docstring
 # pylint: disable=missing-function-docstring
@@ -9,10 +10,7 @@ Test cases in this file process actual images,  I was going to MOCK everything b
 imaging frameworks.   There files are used,  a standard jpg,  a thumbnail and a HEIC file
 
 """
-
-
 import os
-import sys
 import tempfile
 
 import unittest
@@ -22,14 +20,11 @@ from pathlib import Path
 from unittest.mock import patch
 from unittest import TestCase
 
-from Backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
+# pylint: disable=import-error
+from backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
     file_cleaner, duplicate_hash, root_path_list, PICTURE_FILES, MOVIE_FILES
 from Utilities.test_utilities import copy_file, create_file, set_date, \
     DATE_SPEC, DIR_SPEC
-
-sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack, venv doesn't work real well
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-
 
 
 class CleanerUtilsTest(unittest.TestCase):
@@ -45,7 +40,7 @@ class CleanerUtilsTest(unittest.TestCase):
             self.assertEqual('ImageCleaner', my_object.__class__.__name__,
                              f'{my_object.path} Expected ImageCleaner Object - got {my_object.__class__.__name__}')
 
-        my_object = file_cleaner(Path(f'/fake/foo.text'), None)
+        my_object = file_cleaner(Path('/fake/foo.text'), None)
         self.assertEqual('FileCleaner', my_object.__class__.__name__,
                          f'{my_object.path} Expected FileCleaner Object - got {my_object.__class__.__name__}')
 
@@ -70,12 +65,12 @@ class CleanersInitTest(TestCase):
 class Cleaners(TestCase):
 
     def setUp(self):
-        super(Cleaners, self).setUp()
+        super().setUp()
         # define standard files
         self.my_location = Path(os.path.dirname(__file__))
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
         os.mkdir(self.output_folder)
@@ -92,13 +87,13 @@ class Cleaners(TestCase):
 
     def tearDown(self):
         self.temp_base.cleanup()
-        super(Cleaners, self).tearDown()
+        super().tearDown()
 
 
 class CleanerTests(Cleaners):
 
     def setUp(self):
-        super(CleanerTests, self).setUp()
+        super().setUp()
         self.file1 = Cleaner(create_file(self.input_folder.joinpath('a.file')), None)
         self.file2 = Cleaner(create_file(self.input_folder.joinpath('b.file')), None)
 
@@ -163,7 +158,7 @@ class ImageCleanerTests(Cleaners):
         No need to tearDown since super will clean up input directory
         :return:
         """
-        super(ImageCleanerTests, self).setUp()
+        super().setUp()
 
         self.small_obj = ImageCleaner(
             copy_file(self.my_location.joinpath('data').joinpath('small_image.jpg'), self.input_folder), None)
@@ -475,7 +470,7 @@ class ImageCleanerTests(Cleaners):
         mock_system.return_value = 'Windows'
         with self.assertLogs('Cleaner', level='ERROR') as logs:
             new = self.heic_obj.convert(self.run_base, None, remove=False)
-            error_value = f'ERROR:Cleaner:Conversion from HEIC is not supported on Windows'
+            error_value = 'ERROR:Cleaner:Conversion from HEIC is not supported on Windows'
             self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'windows HEIC')
             self.assertEqual(new, self.heic_obj)
 
@@ -536,7 +531,7 @@ class FileTests(Cleaners):
 class FolderTests(Cleaners):
 
     def setUp(self):
-        super(FolderTests, self).setUp()
+        super().setUp()
         self.custom_dir1 = FolderCleaner(self.input_folder.joinpath('custom1'))
         self.custom_dir2 = FolderCleaner(self.input_folder.joinpath('custom2'))
         self.date_dir1 = FolderCleaner(self.input_folder.joinpath(DIR_SPEC))
@@ -629,7 +624,7 @@ class FolderTests(Cleaners):
             ["Alex's House", "Alex's House"],
             ["2014/2014/06/30/20140630-063739/zCMlYzsaTqyElbmIFHvvLw", None],
             ["2014/2014/06/30/20140630-063736", None],
-            ["2003_04_06_TriptoFalls", None],  # todo: this will fail 22 chars not spaces.  Should fix it!
+            ["2003_04_06_TriptoFalls", None],
             ["12-Aug-2014", None]
         ]
 

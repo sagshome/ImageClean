@@ -6,7 +6,6 @@ This is a base class/classes for providing a standard set of attribute on Files/
 -
 
 """
-# pylint: disable=line-too-long
 
 import logging
 import os
@@ -253,7 +252,7 @@ class Cleaner:
             if new.exists() and rollover:
                 logger.debug('Rolling over %s', new)
                 self.rollover_name(new)
-            else:  # todo: this is not true the 'and' does not make sense
+            else:
                 logger.debug('Will not overwrite %s', new)
             copyfile(str(self.path), new)
 
@@ -350,7 +349,6 @@ class Cleaner:
         etc
         :return:
         """
-        # todo: break out of this loop
         if destination.exists():
             for increment in reversed(range(20)):  # 19 -> 0
                 old_path = destination.parent.joinpath(f'{destination.stem}_{increment}{destination.suffix}')
@@ -404,7 +402,6 @@ class FileCleaner(Cleaner):
         :param other:
         :return:
         """
-        # todo: This might be very slow
         return cmp(self.path, other.path, shallow=False)
 
     def __ne__(self, other):
@@ -448,7 +445,7 @@ class ImageCleaner(Cleaner):
     def __init__(self, path_entry: Path, folder: FolderCT = None):
         super().__init__(path_entry, folder)
 
-        self._image = None  # todo: Real image time > then name/dir time.  Maybe stop updating image time.
+        self._image = None
         self._image_data = []
 
     def __eq__(self, other: ImageCT):
@@ -557,7 +554,6 @@ class ImageCleaner(Cleaner):
                     for val in self._image.getdata().split():
                         self._image_data.append(val.histogram())
                 except OSError:  # pragma: no cover
-                    # todo: Find a way to valid this.    OSError does not seem correct
                     logger.error('Warning - failed to read image: %s', self.path)
                     self._image = None
         if opened:
@@ -618,14 +614,12 @@ class ImageCleaner(Cleaner):
             if exif_dict:
                 exif_bytes = piexif.dump(exif_dict)
                 image.save(new_name, format("JPEG"), exif=exif_bytes)
-                # todo:  Another bug,   we loose path info on the converted file
                 if migrated_base:
                     self.relocate_file(migrated_base, remove=remove, rollover=False)
                 elif remove:
                     original_name.unlink()
                 return ImageCleaner(Path(new_name), self.folder)
         except AttributeError as error:  # pragma: no cover
-            # todo: Try and find a real case where this is true
             logger.error('Conversion error: %s - Reason %s is no metadata attribute', self.path, error)
         return self  # pragma: no cover
 
@@ -675,6 +669,7 @@ class FolderCleaner(Cleaner):
 
     """
 
+    # pylint: disable=too-many-arguments
     def __init__(self, path_entry: Path,
                  root_folder: Path = None,
                  output_folder: Path = None,

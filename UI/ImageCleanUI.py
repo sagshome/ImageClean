@@ -20,9 +20,9 @@ from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, Num
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
-from Backend.cleaner import FileCleaner, FolderCleaner
-from Backend.image_clean import ImageClean
-# from Backend.faker import ImageClean
+from backend.cleaner import FileCleaner, FolderCleaner
+from backend.image_clean import ImageClean
+# from backend.faker import ImageClean
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
@@ -465,6 +465,9 @@ class Main(BoxLayout):
 
 
 class ImageCleanApp(App):
+    """
+    Main App
+    """
     drives = []
 
     def build(self):

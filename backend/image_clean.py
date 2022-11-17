@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
-from Backend.cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
+from .cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
 
 
 logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
@@ -32,7 +32,7 @@ LESSER: int = 2
 WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 members is a Yellow flag
 
 
-class ImageClean:
+class ImageClean:  # pylint: disable=too-many-instance-attributes
     """
     This is the main class for image import,   create a instance,  and then .run it
     """
@@ -47,12 +47,11 @@ class ImageClean:
         self.input_folder = Path.home()
         self.output_folder = Path.home()
         self.verbose = True
-        self.do_convert = True  # todo: Provide an option for this
+        self.do_convert = True
         self.recreate = False
         self.force_keep = False  # With R/O directories we can not ever try and remove anything
         self.keep_duplicates = False
         self.keep_movie_clips = False
-        self.process_all_files = False  # todo: re-evaluate this
         self.keep_converted_files = False
         self.keep_original_files = True
         self.ignore_folders = []
@@ -61,10 +60,9 @@ class ImageClean:
 
         if restore:  # Used by UI
             try:
-                conf_file = open(self.conf_file, 'rb')
-                temp = pickle.load(conf_file)
+                with open(self.conf_file, 'rb') as file:
+                    temp = pickle.load(file)
                 self.process_args(temp)
-                conf_file.close()
             except FileNotFoundError:
                 logger.debug('Restore attempt of %s failed', self.conf_file)
         else:  # Used by cmdline
@@ -85,7 +83,7 @@ class ImageClean:
 
         self.movie_list = []  # We need to track these so we can clean up
         self.suspicious_folders = []
-        self.working_folder = tempfile.TemporaryDirectory()
+        self.working_folder = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
 
     def process_args(self, kwargs: dict):
         """
@@ -93,6 +91,7 @@ class ImageClean:
         :param kwargs:
         :return:
         """
+        # pylint: disable=too-many-branches
         for key in kwargs:
             if key == 'verbose':
                 self.verbose = kwargs[key]
@@ -239,11 +238,12 @@ class ImageClean:
         self.set_keep_converted_files(value)
         self.set_keep_movie_clips(value)
 
-    def prepare(self):
+    def _prepare(self):
         """
         For the GUI,  we need a way to 'prepare' the environment
         :return:
         """
+        # pylint: disable=too-many-branches
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
@@ -281,7 +281,7 @@ class ImageClean:
 
         if not self.recreate or self.in_place:  # Same root or importing from a new location
 
-            self.register_files(self.output_folder)
+            self._register_files(self.output_folder)
 
         if self.recreate:
             if self.output_folder.exists():
@@ -316,7 +316,7 @@ class ImageClean:
         This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
 
-        self.prepare()
+        self._prepare()
         # Start it up.
         master = FolderCleaner(self.input_folder,
                                parent=None,
@@ -324,15 +324,15 @@ class ImageClean:
                                output_folder=self.output_folder)
         master.description = None  # We need to do this to ensure that this folder name is not used a description
         await self.process_folder(master)
-        await self.process_duplicate_files()
+        await self._process_duplicate_files()
         self.stop()
 
         # Clean up
         master.reset()
-        self.process_duplicates_movies()
-        self.audit_folders(self.output_folder)
+        self._process_duplicates_movies()
+        self._audit_folders(self.output_folder)
 
-    def register_files(self, output_dir: Path):
+    def _register_files(self, output_dir: Path):
         """
         Take an inventory of all the existing files.    This allows us to easily detected duplicate files.
         :param output_dir:  where we will be moving file to
@@ -341,19 +341,20 @@ class ImageClean:
         for entry in output_dir.iterdir():
             if entry.is_dir():
                 try:
-                    self.register_files(entry)
+                    self._register_files(entry)
                 except PermissionError:
                     pass  # This can happen,  just ignore it
             else:
                 file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register(deep=False)
 
-    def folder_test(self, folder1, folder2) -> int:
+    def _folder_test(self, folder1, folder2) -> int:
         """
         comapre two folders.   this is in teh folderCleaner class but not much use for us with specialized folders
         :param folder1:
         :param folder2:
         :return:
         """
+        # pylint: disable=too-many-return-statements
         if folder1 and folder2:
             # Need to filter out application specific descriptions
             folder1_description = None if folder1.description and folder1.description.startswith(
@@ -378,13 +379,14 @@ class ImageClean:
                 return LESSER
         return EXACT
 
-    async def process_duplicate_files(self):
+    async def _process_duplicate_files(self):
         """
         Whenever we have multiple files with the same basic name,  we get multiple entry in the registry,  this
         will run an audit on them to make sure that they are still valid duplicates.
 
         :return:
         """
+        # pylint: disable=too-many-nested-blocks
         entries = deepcopy(Cleaner.get_hash())
         for entry in entries:
             if len(entries[entry]) > 1:
@@ -398,7 +400,7 @@ class ImageClean:
                             for inner in range(outer + 1, len(entries[entry])):
                                 value = entries[entry][inner]
                                 if this == value:   # We are the same file with different locations weights
-                                    folder_test = self.folder_test(this.folder, value.folder)
+                                    folder_test = self._folder_test(this.folder, value.folder)
                                     if folder_test == GREATER:
                                         self.print(f'{value.path}: being treated as a duplicate')
                                         value.relocate_file(self.get_new_path(value, is_duplicate=True),
@@ -414,7 +416,7 @@ class ImageClean:
                                 new_path = self.get_new_path(this, is_duplicate=True, preserve=True)
                             this.relocate_file(new_path, remove=self.remove_file(this))
 
-    def process_duplicates_movies(self):
+    def _process_duplicates_movies(self):
         """
         While processing images,  we have both movies and images,  often due to iPhones we also have movie images.
         If I find a image and movie with the same name I am assuming they are they same.    So relocate or delete
@@ -432,7 +434,7 @@ class ImageClean:
                         entry.path.unlink()
                     break
 
-    def audit_folders(self, path: Path):
+    def _audit_folders(self, path: Path):
         """
         Look for large and empty folders
         :param path:
@@ -440,7 +442,7 @@ class ImageClean:
         """
         for entry in path.iterdir():
             if entry.is_dir():
-                self.audit_folders(entry)
+                self._audit_folders(entry)
                 size = len(os.listdir(entry))
                 if size == 0:
                     self.print(f'  Removing empty folder {entry}')
@@ -458,7 +460,7 @@ class ImageClean:
         :param: preserve,  when a duplicate is processed you can optionally keep the old path even if it was wrong.
         :return:  A Path representing where this file should be moved or None, if the base path was None
         """
-
+        # pylint: disable=too-many-branches
         base = self.output_folder
         if is_duplicate:
             if not self.duplicate_path:
@@ -526,13 +528,12 @@ class ImageClean:
         if id(new_entry) != id(entry):  # The file was converted and cleaned up
             entry = new_entry  # work on the converted file
 
-        if not self.process_all_files:  # todo:  what process_all_files look like ?  Music,  Text
-            if entry.path.suffix.lower() not in PICTURE_FILES:
-                if entry.path.suffix.lower() in MOVIE_FILES:
-                    self.movie_list.append(entry)
-                else:
-                    self.print(f'.... Ignoring non image file {entry.path}')
-                    return
+        if entry.path.suffix.lower() not in PICTURE_FILES:
+            if entry.path.suffix.lower() in MOVIE_FILES:
+                self.movie_list.append(entry)
+            else:
+                self.print(f'.... Ignoring non image file {entry.path}')
+                return
 
         new_path = self.get_new_path(entry)
         if not entry.is_registered():

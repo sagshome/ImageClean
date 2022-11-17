@@ -17,12 +17,8 @@ import sys
 
 from datetime import datetime
 from pathlib import Path
-
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-
-# todo: This is to get around import errors.   WHY !
-from Backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position
-from Backend.image_clean import ImageClean  # pylint: disable=wrong-import-position
+from .cleaner import FileCleaner  # pylint: disable=wrong-import-position
+from .image_clean import ImageClean  # pylint: disable=wrong-import-position
 
 
 APP_PATH = Path(sys.argv[0])
@@ -54,7 +50,6 @@ if log_file.exists() and os.stat(log_file).st_size > 100000:
 
 logger = logging.getLogger(LOGGER_NAME)  # pylint: disable=invalid-name
 
-# todo:  Need to understand this logging thing better
 FH = logging.FileHandler(filename=log_file)
 FH_FORMATTER = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
 FH.setFormatter(FH_FORMATTER)
@@ -105,8 +100,6 @@ if __name__ == '__main__':
             APP.set_keep_duplicates(True)
         elif opt == '-m':
             APP.set_keep_movie_clips(True)
-        elif opt == '-a':
-            APP.process_all_files = True
         elif opt == '-c':
             APP.set_keep_converted_files(True)
         elif opt == '-s':
@@ -126,5 +119,4 @@ if __name__ == '__main__':
     if verbose:
         print(f'logging to...{log_file}')
     APP.run()
-    # todo: roll back small files that are unique
     logger.debug('Completed (%s - %s)', datetime.now(), start_time)

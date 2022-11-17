@@ -11,7 +11,13 @@ DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str
 
 
 def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
+    """
 
+    :param in_file:
+    :param out_path:
+    :param new_name:
+    :return:
+    """
     if not out_path.exists():
         makedirs(out_path)
 
@@ -23,25 +29,35 @@ def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
 
 
 def count_files(path: Path):
+    """
+
+    :param path:
+    :return:
+    """
     count = 0
     for _, _, files_list in walk(path):
-        for file in files_list:
+        for _ in files_list:
             count += 1
     return count
 
 
 def create_file(name: Path, data: str = None, empty: bool = False) -> Path:
-
+    """
+    create a text file
+    :param name:
+    :param data:
+    :param empty:
+    :return:
+    """
     if not name.parent.exists():
         makedirs(name.parent)
 
-    f = open(name, 'w+')
-    if not empty:
-        if not data:
-            f.write(str(name))
-        else:
-            f.write(data)
-    f.close()
+    with open(name, 'w+', encoding='utf-8') as file:
+        if not empty:
+            if not data:
+                file.write(str(name))
+            else:
+                file.write(data)
     return name
 
 

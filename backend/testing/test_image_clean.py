@@ -1,15 +1,13 @@
 """
 Test Cases for the Image Clean classes
 """
+# pylint: disable=duplicate-code
 # pylint: disable=too-many-lines
 # pylint: disable=line-too-long
 # pylint: disable=missing-class-docstring
 # pylint: disable=missing-function-docstring
-
-import asyncio
 import os
 import stat
-import sys
 import tempfile
 import unittest
 
@@ -20,12 +18,10 @@ from unittest.mock import patch
 from freezegun import freeze_time
 import pytest
 
-from Backend.cleaner import Cleaner
-from Backend.image_clean import ImageClean
+# pylint: disable=import-error
+from backend.cleaner import Cleaner
+from backend.image_clean import ImageClean
 from Utilities.test_utilities import create_image_file, count_files, set_date, copy_file, DATE_SPEC, DIR_SPEC
-
-sys.path.append(f'{Path.home().joinpath("ImageClean")}')  # I got to figure out this hack,
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
 class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
@@ -40,16 +36,16 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.temp_base.cleanup()
         Cleaner.clear_caches()
-        super(ActualScenarioTest, self).tearDown()
+        super().tearDown()
 
     def setUp(self):
-        super(ActualScenarioTest, self).setUp()
+        super().setUp()
         self.my_location = Path(os.path.dirname(__file__))
         self.app_name = 'test_instance'
         self.other_folder_name = 'CustomName'
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
         self.other_folder = self.input_folder.joinpath(self.other_folder_name)
@@ -984,13 +980,13 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
 class InitTest(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
-        super(InitTest, self).setUp()
-        self.tempdir = tempfile.TemporaryDirectory()
+        super().setUp()
+        self.tempdir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         # print(f'\n{str(self)} - {self.tempdir.name}')
 
     def tearDown(self):
         self.tempdir.cleanup()
-        super(InitTest, self).tearDown()
+        super().tearDown()
 
     @patch('pathlib.Path.home')
     async def test_init(self, home):
@@ -1012,7 +1008,6 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(app.force_keep)
         self.assertFalse(app.keep_duplicates)
         self.assertFalse(app.keep_movie_clips)
-        self.assertFalse(app.process_all_files)
         self.assertFalse(app.keep_converted_files)
         self.assertTrue(app.keep_original_files, "Keep original default is not True")
         self.assertListEqual(app.ignore_folders, [], "Ignore folders list is not empty")
@@ -1037,7 +1032,7 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             app = ImageClean('test_app', restore=True)
-            error_value = f'DEBUG:Cleaner:Restore attempt of'
+            error_value = 'DEBUG:Cleaner:Restore attempt of'
             self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'Restore Fails')
             # default value
             self.assertEqual(app.app_name, 'test_app', "Failed to set the app name")
@@ -1196,15 +1191,15 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
     def tearDown(self):
         self.temp_base.cleanup()
         Cleaner.clear_caches()
-        super(EdgeCaseTest, self).tearDown()
+        super().tearDown()
 
     def setUp(self):
-        super(EdgeCaseTest, self).setUp()
+        super().setUp()
         self.my_location = Path(os.path.dirname(__file__))
         self.app_name = 'test_instance'
 
         # Make basic folders
-        self.temp_base = tempfile.TemporaryDirectory()
+        self.temp_base = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.output_folder = Path(self.temp_base.name).joinpath('Output')
         self.input_folder = Path(self.temp_base.name).joinpath('Input')
 
@@ -1245,8 +1240,8 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
         home.return_value = Path(self.temp_base.name)
 
         name = self.input_folder.joinpath('text.jpg')
-        my_file = open(name, 'w+')
-        my_file.close()  # Empty File
+        with open(name, 'w+', encoding="utf-8") as name:  # Empty file
+            pass
         cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
         cleaner.verbose = False
         await cleaner.run()
@@ -1256,7 +1251,7 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
         await cleaner.run()
         my_print.assert_called()
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     async def test_audit_folders(self, home):
         home.return_value = Path(self.temp_base.name)
@@ -1278,7 +1273,7 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
         self.assertTrue(output_path.joinpath(two.name).exists(), 'Image two processed')
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     async def test_audit_folders_1(self, home):
         home.return_value = Path(self.temp_base.name)
@@ -1291,7 +1286,7 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
         await cleaner.run()
         self.assertEqual(len(cleaner.suspicious_folders), 0, 'No large folders')
 
-    @patch('Backend.image_clean.WARNING_FOLDER_SIZE', 2)
+    @patch('backend.image_clean.WARNING_FOLDER_SIZE', 2)
     @patch('pathlib.Path.home')
     async def test_audit_folders_2(self, home):
         home.return_value = Path(self.temp_base.name)
