@@ -8,6 +8,7 @@ import types
 
 from pathlib import Path
 from time import sleep
+from datetime import datetime
 
 from kivy.clock import Clock
 from kivy.app import App
@@ -257,9 +258,9 @@ class Progress(Widget):
             self.updates.cancel()
             self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             calculate_size(cleaner_app.output_folder, mp_output_count)
-            self.progress_summary.text = f"Summary:\n\nInput Folder: {cleaner_app.input_folder}\n" \
+            self.progress_text.text += f"Summary:\n\nInput Folder: {cleaner_app.input_folder} " \
                                          f"Input File Count: {mp_input_count.value}\n" \
-                                         f"Output Folder: {cleaner_app.output_folder}\n" \
+                                         f"Output Folder: {cleaner_app.output_folder} " \
                                          f"Output File Count: {mp_output_count.value}"
 
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
@@ -291,7 +292,7 @@ class Progress(Widget):
         :param text:  (what we want to display)
         :return:
         """
-        mp_print_queue.put(text)
+        mp_print_queue.put(f'{datetime.now()}:{text}')
 
     @staticmethod
     def override_progress(_):

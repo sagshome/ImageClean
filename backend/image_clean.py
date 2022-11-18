@@ -244,6 +244,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         :return:
         """
         # pylint: disable=too-many-branches
+        self.print('Preparing the environment.')
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
@@ -317,12 +318,14 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
 
         self._prepare()
+        self.print('Registering existing images.')
         # Start it up.
         master = FolderCleaner(self.input_folder,
                                parent=None,
                                root_folder=self.input_folder,
                                output_folder=self.output_folder)
         master.description = None  # We need to do this to ensure that this folder name is not used a description
+        self.print('Starting Imports.')
         await self.process_folder(master)
         await self._process_duplicate_files()
         self.stop()
@@ -331,6 +334,9 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         master.reset()
         self._process_duplicates_movies()
         self._audit_folders(self.output_folder)
+
+        self.print('Auditing folders.')
+        self.audit_folders(self.output_folder)
 
     def _register_files(self, output_dir: Path):
         """
@@ -387,6 +393,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         :return:
         """
         # pylint: disable=too-many-nested-blocks
+        self.print('Processing any duplicate files.')
         entries = deepcopy(Cleaner.get_hash())
         for entry in entries:
             if len(entries[entry]) > 1:
@@ -424,6 +431,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         todo:   Maybe people what their damn clips in the same folder.   Make this an option.
         :return:
         """
+        self.print('Processing any movie clips.')
         for entry in self.movie_list:
             for item in entry.get_all_registered():
                 if item.path.suffix in PICTURE_FILES:
@@ -515,11 +523,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         :param entry: Cleaner object,  promoted to a subclass when processed
         """
-        await asyncio.sleep(0)
-        self.print(f'.. File: {entry.path}')
-
         self.increment_progress()
-
+        await asyncio.sleep(0)
         if not entry.is_valid:
             self.print(f'.... File {entry.path} is invalid.')
             return
@@ -555,7 +560,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                     if value.path.parent == new_path:  # A copy already exists where we should be
                         found = True
                         duplicate_path = self.get_new_path(entry, is_duplicate=True)
-                        self.print(f'.. File: {entry.path} duplicate file relocating to {duplicate_path}')
+                        if duplicate_path:
+                            self.print(f'.. File: {entry.path} duplicate file relocating to {duplicate_path}')
                         entry.relocate_file(duplicate_path, remove=self.remove_file(entry))
                         break
 
