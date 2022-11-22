@@ -17,8 +17,8 @@ import sys
 
 from datetime import datetime
 from pathlib import Path
-from .cleaner import FileCleaner  # pylint: disable=wrong-import-position
-from .image_clean import ImageClean  # pylint: disable=wrong-import-position
+from backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position
+from backend.image_clean import ImageClean  # pylint: disable=wrong-import-position
 
 
 APP_PATH = Path(sys.argv[0])

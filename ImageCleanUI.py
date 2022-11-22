@@ -1,3 +1,6 @@
+from backend.cleaner import FileCleaner, FolderCleaner
+from backend.image_clean import ImageClean
+
 import asyncio
 import logging
 import os
@@ -7,23 +10,19 @@ from multiprocessing import Value, Queue
 import types
 
 from pathlib import Path
-from time import sleep
 from datetime import datetime
 
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.checkbox import CheckBox
 from kivy.uix.textinput import TextInput
 from kivy.uix.floatlayout import FloatLayout
 from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, NumericProperty
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
-from backend.cleaner import FileCleaner, FolderCleaner
-from backend.image_clean import ImageClean
 # from backend.faker import ImageClean
+
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
