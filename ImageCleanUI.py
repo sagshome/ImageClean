@@ -1,5 +1,4 @@
-from backend.cleaner import FileCleaner, FolderCleaner
-from backend.image_clean import ImageClean
+
 
 import asyncio
 import logging
@@ -22,7 +21,10 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
 # from backend.faker import ImageClean
+sys.path.append('.')
 
+from backend.cleaner import FileCleaner, FolderCleaner
+from backend.image_clean import ImageClean
 
 application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
 
