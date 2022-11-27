@@ -4,9 +4,10 @@ Just some things to make testing easier
 from datetime import datetime
 from os import makedirs, walk
 from pathlib import Path
-from piexif import ImageIFD, ExifIFD, dump, insert, load
 from shutil import copyfile
 from typing import Union
+
+from piexif import ImageIFD, ExifIFD, dump, insert, load
 from PIL import Image, ImageDraw
 
 DATE_SPEC = datetime(1961, 9, 27)
@@ -119,4 +120,3 @@ def set_date(original_file: Path, new_date: Union[datetime, None]):
     # Save changes
     exif_bytes = dump(exif_dict)
     insert(exif_bytes, str(original_file))
-

@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import pickle
+import sys
 import tempfile
 
 from copy import deepcopy
@@ -14,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
+sys.path.append('.')
+# pylint: disable=import-error wrong-import-position
 from backend.cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
 
 
@@ -346,14 +349,14 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
             if entry.is_dir():
                 try:
                     self._register_files(entry)
-                except PermissionError:
+                except PermissionError:  #pragma: no cover
                     pass  # This can happen,  just ignore it
             else:
                 file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register(deep=False)
 
     def _folder_test(self, folder1, folder2) -> int:
         """
-        comapre two folders.   this is in teh folderCleaner class but not much use for us with specialized folders
+        comapre two folders.   this is in the folderCleaner class but not much use for us with specialized folders
         :param folder1:
         :param folder2:
         :return:
@@ -371,7 +374,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
             if folder1_description and not folder2_description:
                 return GREATER
             if folder2_description and not folder1_description:
-                return LESSER
+                return LESSER  # pragma: no cover
 
             if folder1.date and folder2.date:
                 if folder1.date > folder2.date:
@@ -385,7 +388,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
     async def _process_duplicate_files(self):
         """
-        Whenever we have multiple files with the same basic name,  we get multiple entry in the registry,  this
+        Whenever we have multiple files with the same basic name,  we get multiple entries in the registry,  this
         will run an audit on them to make sure that they are still valid duplicates.
 
         :return:
@@ -398,7 +401,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 for outer in range(len(entries[entry])):
                     this = entries[entry][outer]
                     if this:
-                        if str(this.path).startswith(str(self.duplicate_path)):
+                        if str(this.path).startswith(str(self.duplicate_path)):  # pragma: no cover
                             continue  # This is already flagged as a duplicate
                         new_path = self.get_new_path(this)
                         if this.path.parent == new_path:  # I am still in the right place

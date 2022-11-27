@@ -11,7 +11,6 @@ imaging frameworks.   There files are used,  a standard jpg,  a thumbnail and a 
 
 """
 import os
-import oschmod
 import platform
 import tempfile
 

@@ -3,13 +3,12 @@ import logging
 import os
 import platform
 import sys
-from multiprocessing import Value, Queue
 import types
 
+from multiprocessing import Value, Queue
 from pathlib import Path
 from datetime import datetime
 
-import os
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 
 from kivy.clock import Clock
@@ -25,7 +24,7 @@ sys.path.append('.')
 from backend.cleaner import FileCleaner, FolderCleaner
 from backend.image_clean import ImageClean
 
-application_name = 'Cleaner'  # I am hardcoding this value since I call it from cmdline and UI which have diff names
+application_name = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
 
 app_path = Path(sys.argv[0])
 run_path = Path(Path.home().joinpath(f'.{application_name}'))
@@ -37,7 +36,8 @@ results_file = run_path.joinpath(f'{application_name}.results')
 if results_file.exists():
     results_file.unlink()
     FileCleaner.rollover_name(results_file)
-RESULTS = open(results_file, "w+")
+
+RESULTS = open(results_file, "w+")  # pylint: disable=consider-using-with
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_name(log_file)
@@ -152,7 +152,7 @@ class DismissDialog(BoxLayout):
     error_text = StringProperty()
 
     def __init__(self, message=None, **kwargs):
-        super(DismissDialog, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.error_text = message
         self.popup = None
 
@@ -219,6 +219,7 @@ class ActionBox(BoxLayout):
         cleaner_app.save_config()
         self.parent.ids['Progress'].start_application()
         self.parent.remove_widget(self.parent.ids['ActionBox'])
+
 
 class Progress(Widget):
     progress_bar = ObjectProperty(None)
@@ -366,8 +367,7 @@ class FolderSelector(BoxLayout):
     def have_drives(self):
         if len(self.drives) < 2:
             return 0
-        else:
-            return 1
+        return 1
 
     def changed_drive(self, value, selected):
         self.load_base = Path(value).parts[0]
@@ -448,21 +448,29 @@ class Main(BoxLayout):
     @staticmethod
     def about():
         dismiss_dialog('About',
-                       f"This application is provided as is.\n\n"
-                       f"Author: Matthew Sargent\n"
-                       f"Support: matthew.sargent61@gmail.com\n\n"
-                      )
+                       "This application is provided as is.\n\n"
+                       "Author: Matthew Sargent\n"
+                       "Support: matthew.sargent61@gmail.com\n\n")
 
     def check_keep_original(self, touch):
+        """
+        Selected when you want to not remove original files
+        :param touch: set or cleared
+        :return:
+        """
         cleaner_app.set_keep_original_files(touch)
-        logger.debug(f'Keep original is {touch}')
+        logger.debug('Keep original is %s', touch)
 
     def log_hit(checkbox, value):
         pass
 
     def exit(self, value):
-        print(f'Exit {self} - value is {value}')
-        exit(value)
+        """
+        Leave the program
+        :param value:  Exit return code (abort vs quit)
+        :return:
+        """
+        sys.exit(value)
 
 
 class ImageCleanApp(App):
