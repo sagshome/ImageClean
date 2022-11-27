@@ -1,5 +1,3 @@
-
-
 import asyncio
 import logging
 import os
@@ -11,6 +9,9 @@ import types
 from pathlib import Path
 from datetime import datetime
 
+import os
+os.environ["KIVY_NO_CONSOLELOG"] = "1"
+
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -20,9 +21,7 @@ from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, Num
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
-# from backend.faker import ImageClean
 sys.path.append('.')
-
 from backend.cleaner import FileCleaner, FolderCleaner
 from backend.image_clean import ImageClean
 

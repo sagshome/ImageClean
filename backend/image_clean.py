@@ -333,10 +333,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         # Clean up
         master.reset()
         self._process_duplicates_movies()
-        self._audit_folders(self.output_folder)
-
         self.print('Auditing folders.')
-        self.audit_folders(self.output_folder)
+        self._audit_folders(self.output_folder)
 
     def _register_files(self, output_dir: Path):
         """

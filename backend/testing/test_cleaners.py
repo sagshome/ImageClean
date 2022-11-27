@@ -11,6 +11,8 @@ imaging frameworks.   There files are used,  a standard jpg,  a thumbnail and a 
 
 """
 import os
+import oschmod
+import platform
 import tempfile
 
 import unittest
@@ -347,12 +349,13 @@ class ImageCleanerTests(Cleaners):
         self.jpg_obj.relocate_file(new_dir)
         self.assertTrue(new_dir.joinpath(self.jpg_obj.path.name), 'Directory was created')
 
-        os.chmod(new_dir, 0o500)  # Owner +r+x
-        new_image = ImageCleaner(new_dir.joinpath(self.jpg_obj.path.name), None)
-        with self.assertLogs('Cleaner', level='DEBUG') as logs:
-            new_image.relocate_file(self.output_folder, rollover=True, remove=True)
-            error_value = f'DEBUG:Cleaner:{new_image.path}'
-            self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'R/O remove')
+        if platform.system() not in ['Windows', 'win32']:  # chmod does not work in windows
+            os.chmod(new_dir, 0o500)  # Owner +r+x
+            new_image = ImageCleaner(new_dir.joinpath(self.jpg_obj.path.name), None)
+            with self.assertLogs('Cleaner', level='DEBUG') as logs:
+                new_image.relocate_file(self.output_folder, rollover=True, remove=True)
+                error_value = f'DEBUG:Cleaner:{new_image.path}'
+                self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'R/O remove')
 
     def test_get_data_from_path_name(self):
         image = ImageCleaner(Path('/a/b/c.jpg'), None)
@@ -429,31 +432,36 @@ class ImageCleanerTests(Cleaners):
         self.assertEqual(self.jpg_obj, self.jpg_obj.convert(self.run_base, None))
 
     def test_convert_defaults(self):
-        new_obj = self.heic_obj.convert(self.run_base, self.migration_base)  # Default  remove=True
+        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
 
-        self.assertNotEqual(self.heic_obj, new_obj)
-        self.assertEqual(self.heic_obj.path.stem, new_obj.path.stem)
-        self.assertEqual(new_obj.path.suffix, '.jpg')
-        self.assertTrue(new_obj.path.exists())
-        self.assertFalse(self.heic_obj.path.exists())
+            new_obj = self.heic_obj.convert(self.run_base, self.migration_base)  # Default  remove=True
+
+            self.assertNotEqual(self.heic_obj, new_obj)
+            self.assertEqual(self.heic_obj.path.stem, new_obj.path.stem)
+            self.assertEqual(new_obj.path.suffix, '.jpg')
+            self.assertTrue(new_obj.path.exists())
+            self.assertFalse(self.heic_obj.path.exists())
 
     def test_convert_no_migrate_inplace(self):
-        new_obj = self.heic_obj.convert(self.run_base, None, remove=True)  # Default  remove=True
+        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
 
-        self.assertNotEqual(self.heic_obj, new_obj)
-        self.assertEqual(self.heic_obj.path.stem, new_obj.path.stem)
-        self.assertEqual(new_obj.path.suffix, '.jpg')
-        self.assertTrue(new_obj.path.exists())
-        self.assertFalse(self.heic_obj.path.exists())
+            new_obj = self.heic_obj.convert(self.run_base, None, remove=True)  # Default  remove=True
+
+            self.assertNotEqual(self.heic_obj, new_obj)
+            self.assertEqual(self.heic_obj.path.stem, new_obj.path.stem)
+            self.assertEqual(new_obj.path.suffix, '.jpg')
+            self.assertTrue(new_obj.path.exists())
+            self.assertFalse(self.heic_obj.path.exists())
 
     def test_convert_exists(self):
-        new_obj = self.heic_obj.convert(self.run_base, None, remove=False)
-        self.assertTrue(new_obj.path.exists())
-        self.assertTrue(self.heic_obj.path.exists())
-        with self.assertLogs('Cleaner', level='DEBUG') as logs:
-            self.heic_obj.convert(self.run_base, None, remove=False)
-            error_value = f'DEBUG:Cleaner:Cleaning up {new_obj.path} - It already exists'
-            self.assertEqual(logs.output[len(logs.output) - 1], error_value, 'Output Exists')
+        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
+            new_obj = self.heic_obj.convert(self.run_base, None, remove=False)
+            self.assertTrue(new_obj.path.exists())
+            self.assertTrue(self.heic_obj.path.exists())
+            with self.assertLogs('Cleaner', level='DEBUG') as logs:
+                self.heic_obj.convert(self.run_base, None, remove=False)
+                error_value = f'DEBUG:Cleaner:Cleaning up {new_obj.path} - It already exists'
+                self.assertEqual(logs.output[len(logs.output) - 1], error_value, 'Output Exists')
 
     def test_convert_not_in_place(self):
         new_obj = self.heic_obj.convert(self.run_base, self.migration_base, remove=False)

@@ -1,3 +1,6 @@
+"""
+Just some things to make testing easier
+"""
 from datetime import datetime
 from os import makedirs, walk
 from pathlib import Path
@@ -102,11 +105,11 @@ def set_date(original_file: Path, new_date: Union[datetime, None]):
     exif_dict = load(str(original_file))
     if not new_date:
         if ImageIFD.DateTime in exif_dict['0th']:
-            del (exif_dict['0th'][ImageIFD.DateTime])
+            del exif_dict['0th'][ImageIFD.DateTime]
         if ExifIFD.DateTimeOriginal in exif_dict['Exif']:
-            del (exif_dict['Exif'][ExifIFD.DateTimeOriginal])
+            del exif_dict['Exif'][ExifIFD.DateTimeOriginal]
         if ExifIFD.DateTimeDigitized in exif_dict['Exif']:
-            del (exif_dict['Exif'][ExifIFD.DateTimeDigitized])
+            del exif_dict['Exif'][ExifIFD.DateTimeDigitized]
     else:
         new_date = new_date.strftime("%Y:%m:%d %H:%M:%S")
         exif_dict['0th'][ImageIFD.DateTime] = new_date
@@ -116,5 +119,4 @@ def set_date(original_file: Path, new_date: Union[datetime, None]):
     # Save changes
     exif_bytes = dump(exif_dict)
     insert(exif_bytes, str(original_file))
-
 

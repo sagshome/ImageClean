@@ -595,7 +595,7 @@ class ImageCleaner(Cleaner):
             logger.error('Conversion from HEIC is not supported on Windows')
             return self
 
-        import pyheif  # pylint: disable=import-outside-toplevel
+        import pyheif  # pylint: disable=import-outside-toplevel, import-error
 
         original_name = self.path
         new_name = work_dir.joinpath(f'{self.path.stem}.jpg')

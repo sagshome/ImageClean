@@ -7,6 +7,7 @@ Test Cases for the Image Clean classes
 # pylint: disable=missing-class-docstring
 # pylint: disable=missing-function-docstring
 import os
+import platform
 import stat
 import tempfile
 import unittest
@@ -437,20 +438,20 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
             ./Output/test_instance_Migrated/heic_image.HEIC
             ./Input/heic_image.HEIC
         """
+        if platform.system() not in ['Windows', 'win32']:
+            home.return_value = Path(self.temp_base.name)
+            heic = copy_file(self.heic_file, self.input_folder)
 
-        home.return_value = Path(self.temp_base.name)
-        heic = copy_file(self.heic_file, self.input_folder)
+            cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
+            cleaner.set_keep_original_files(True)
+            cleaner.set_keep_converted_files(True)
+            cleaner.verbose = False
+            await cleaner.run()
 
-        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
-        cleaner.set_keep_original_files(True)
-        cleaner.set_keep_converted_files(True)
-        cleaner.verbose = False
-        await cleaner.run()
-
-        self.assertTrue(cleaner.migrated_path.joinpath(heic.name).exists())
-        self.assertTrue(heic.exists())
-        self.assertTrue(self.output_folder.  # Kludge,  I just know the date on the file.  cheater, cheater
-                        joinpath('2021').joinpath('10').joinpath('7').joinpath(f'{heic.stem}.jpg').exists())
+            self.assertTrue(cleaner.migrated_path.joinpath(heic.name).exists())
+            self.assertTrue(heic.exists())
+            self.assertTrue(self.output_folder.  # Kludge,  I just know the date on the file.  cheater, cheater
+                            joinpath('2021').joinpath('10').joinpath('7').joinpath(f'{heic.stem}.jpg').exists())
 
     @patch('pathlib.Path.home')
     async def test_dup_jpg_new_date(self, home):
@@ -1107,58 +1108,59 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
 
     @patch('pathlib.Path.home')
     async def test_prepare(self, home):
-        home.return_value = Path(self.tempdir.name)
-        output_folder = Path(self.tempdir.name).joinpath('output')
-        input_folder = Path(self.tempdir.name).joinpath('input')
+        if platform.system() not in ['Windows', 'win32']:
+            home.return_value = Path(self.tempdir.name)
+            output_folder = Path(self.tempdir.name).joinpath('output')
+            input_folder = Path(self.tempdir.name).joinpath('input')
 
-        os.mkdir(output_folder)
-        os.mkdir(input_folder)
+            os.mkdir(output_folder)
+            os.mkdir(input_folder)
 
-        app = ImageClean('test_app')
-        app.output_folder = output_folder
-        app.input_folder = input_folder
-        app.verbose = False
+            app = ImageClean('test_app')
+            app.output_folder = output_folder
+            app.input_folder = input_folder
+            app.verbose = False
 
-        os.chmod(output_folder, mode=stat.S_IREAD)  # set to R/O
-        with pytest.raises(AssertionError):  # Must assert with R/O output folder
+            os.chmod(output_folder, mode=stat.S_IREAD)  # set to R/O
+            with pytest.raises(AssertionError):  # Must assert with R/O output folder
+                await app.run()
+
+            os.chmod(output_folder, mode=stat.S_IRWXU)  # Rest output
+            os.chmod(input_folder, mode=stat.S_IREAD)  # Set input to R/O
+
             await app.run()
+            self.assertTrue(app.force_keep, 'Force Keep is set')
+            self.assertEqual(len(app.ignore_folders), 4)
+            self.assertEqual(len(app.bad_parents), 5)
 
-        os.chmod(output_folder, mode=stat.S_IRWXU)  # Rest output
-        os.chmod(input_folder, mode=stat.S_IREAD)  # Set input to R/O
+            app.input_folder = app.output_folder
+            app.set_recreate(True)
+            with pytest.raises(AssertionError):  # Must assert if trying to recreate the input folder
+                await app.run()
 
-        await app.run()
-        self.assertTrue(app.force_keep, 'Force Keep is set')
-        self.assertEqual(len(app.ignore_folders), 4)
-        self.assertEqual(len(app.bad_parents), 5)
-
-        app.input_folder = app.output_folder
-        app.set_recreate(True)
-        with pytest.raises(AssertionError):  # Must assert if trying to recreate the input folder
+            app.set_recreate(False)
             await app.run()
+            self.assertTrue(app.in_place, 'In place is not set')
+            self.assertIsNone(app.duplicate_path)
+            self.assertIsNone(app.migrated_path)
+            self.assertIsNone(app.image_movies_path)
+            self.assertIsNotNone(app.small_path)
+            self.assertIsNotNone(app.no_date_path)
 
-        app.set_recreate(False)
-        await app.run()
-        self.assertTrue(app.in_place, 'In place is not set')
-        self.assertIsNone(app.duplicate_path)
-        self.assertIsNone(app.migrated_path)
-        self.assertIsNone(app.image_movies_path)
-        self.assertIsNotNone(app.small_path)
-        self.assertIsNotNone(app.no_date_path)
+            app.set_keep_movie_clips(True)
+            app.set_keep_duplicates(True)
+            app.set_keep_converted_files(True)
+            await app.run()
+            self.assertIsNotNone(app.duplicate_path)
+            self.assertIsNotNone(app.migrated_path)
+            self.assertIsNotNone(app.image_movies_path)
 
-        app.set_keep_movie_clips(True)
-        app.set_keep_duplicates(True)
-        app.set_keep_converted_files(True)
-        await app.run()
-        self.assertIsNotNone(app.duplicate_path)
-        self.assertIsNotNone(app.migrated_path)
-        self.assertIsNotNone(app.image_movies_path)
-
-        # Auto Cleanup in action
-        self.assertFalse(app.duplicate_path.exists(), 'Duplicate path does not exist')
-        self.assertFalse(app.migrated_path.exists(), 'Migrate path does not exist')
-        self.assertFalse(app.image_movies_path.exists(), 'Movie path does not exist')
-        self.assertFalse(app.no_date_path.exists(), 'No_Date path does not exist')
-        self.assertFalse(app.small_path.exists(), 'Small path does not exist')
+            # Auto Cleanup in action
+            self.assertFalse(app.duplicate_path.exists(), 'Duplicate path does not exist')
+            self.assertFalse(app.migrated_path.exists(), 'Migrate path does not exist')
+            self.assertFalse(app.image_movies_path.exists(), 'Movie path does not exist')
+            self.assertFalse(app.no_date_path.exists(), 'No_Date path does not exist')
+            self.assertFalse(app.small_path.exists(), 'Small path does not exist')
 
     @freeze_time("1961-09-27 19:21:34")
     @patch('pathlib.Path.home')
@@ -1212,14 +1214,15 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
 
     @patch('pathlib.Path.home')
     async def test_read_only_input_forces_force_ro(self, home):
-        home.return_value = Path(self.temp_base.name)
-        orig = copy_file(self.jpg_file, self.input_folder)
-        os.chmod(self.input_folder, mode=(stat.S_IREAD | stat.S_IEXEC))  # Set input to R/O
-        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
-        cleaner.set_keep_original_files(False)
-        cleaner.verbose = False
-        await cleaner.run()
-        self.assertTrue(orig.exists())
+        if platform.system() not in ['Windows', 'win32']:
+            home.return_value = Path(self.temp_base.name)
+            orig = copy_file(self.jpg_file, self.input_folder)
+            os.chmod(self.input_folder, mode=(stat.S_IREAD | stat.S_IEXEC))  # Set input to R/O
+            cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder)
+            cleaner.set_keep_original_files(False)
+            cleaner.verbose = False
+            await cleaner.run()
+            self.assertTrue(orig.exists())
 
     @patch('pathlib.Path.home')
     async def test_bad_parents(self, home):
