@@ -11,7 +11,6 @@ import sys
 import tempfile
 
 from copy import deepcopy
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
@@ -37,7 +36,7 @@ WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 memb
 
 class ImageClean:  # pylint: disable=too-many-instance-attributes
     """
-    This is the main class for image import,   create a instance,  and then .run it
+    This is the main class for image import,   create an instance,  and then .run it
     """
     def __init__(self, app: str, restore=False, **kwargs):
         self.app_name = app
@@ -49,23 +48,18 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         # Default option/values
         self.input_folder = Path.home()
         self.output_folder = Path.home()
-        self.verbose = True
+        self.verbose = False
         self.do_convert = True
-        self.recreate = False
         self.force_keep = False  # With R/O directories we can not ever try and remove anything
-        self.keep_duplicates = False
-        self.keep_movie_clips = False
-        self.keep_converted_files = False
         self.keep_original_files = True
         self.ignore_folders = []
-        self.bad_parents = []
         self.progress = 0
 
         if restore:  # Used by UI
             try:
                 with open(self.conf_file, 'rb') as file:
                     temp = pickle.load(file)
-                self.process_args(temp)
+                    self.process_args(temp)
             except FileNotFoundError:
                 logger.debug('Restore attempt of %s failed', self.conf_file)
         else:  # Used by cmdline
@@ -85,7 +79,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.image_movies_path = None
 
         self.movie_list = []  # We need to track these so we can clean up
-        self.suspicious_folders = []
         self.working_folder = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
 
     def process_args(self, kwargs: dict):
@@ -98,30 +91,16 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         for key in kwargs:
             if key == 'verbose':
                 self.verbose = kwargs[key]
-            elif key == 'recreate':
-                self.recreate = kwargs[key]
             elif key == 'do_convert':
                 self.do_convert = kwargs[key]
             elif key == 'input':
                 self.input_folder = kwargs[key]
             elif key == 'output':
                 self.output_folder = kwargs[key]
-            elif key == 'keep_duplicates':
-                self.keep_duplicates = kwargs[key]
-            elif key == 'keep_clips':
-                self.keep_movie_clips = kwargs[key]
-            elif key == 'keep_conversions':
-                self.keep_converted_files = kwargs[key]
             elif key == 'keep_originals':
                 self.keep_original_files = kwargs[key]
-            elif key == 'ignore_folders':
-                for value in kwargs[key]:
-                    self.ignore_folders.append(value)
-            elif key == 'bad_parents':
-                for value in kwargs[key]:
-                    self.bad_parents.append(value)
             else:
-                assert False, f'Invalid option supplied: {key}'  # pragma: no cover
+                logger.debug('Argument:%s is being skipped failed', key)
 
     def save_config(self):
         """
@@ -129,16 +108,10 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         :return:
         """
         config = {'verbose': self.verbose,
-                  'recreate': self.recreate,
                   'do_convert': self.do_convert,
                   'input': self.input_folder,
                   'output': self.output_folder,
-                  'keep_duplicates': self.keep_duplicates,
-                  'keep_clips': self.keep_movie_clips,
-                  'keep_conversions': self.keep_converted_files,
                   'keep_originals': self.keep_original_files,
-                  'ignore_folders': self.ignore_folders,
-                  'bad_parents': self.bad_parents,
                   }
         with open(self.conf_file, 'wb') as conf_file:
             pickle.dump(config, conf_file, pickle.HIGHEST_PROTOCOL)
@@ -161,143 +134,40 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         self.progress += 1
 
-    def set_recreate(self, value: bool):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        self.recreate = value
-
-    def set_keep_duplicates(self, value: bool):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        self.keep_duplicates = value
-
-    def set_keep_movie_clips(self, value: bool):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        self.keep_movie_clips = value
-
-    def set_keep_converted_files(self, value: bool):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        self.keep_converted_files = value
-
-    def set_keep_original_files(self, value: bool):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        self.keep_original_files = value
-
-    def add_ignore_folder(self, value: Path):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        if value not in self.ignore_folders:
-            self.ignore_folders.append(value)
-            return True
-        return False
-
-    def add_bad_parents(self, value: str):
-        """
-        Maybe over kill ?
-
-        :param value:
-        :return:
-        """
-        if value not in self.bad_parents:
-            self.bad_parents.append(value)
-            return True
-        return False
-
-    def set_paranoid(self, value: bool):
-        """
-        Set / Unset the 'saving' file settings
-        :param value:
-        :return:
-        """
-        self.set_keep_duplicates(value)
-        self.set_keep_original_files(value)
-        self.set_keep_converted_files(value)
-        self.set_keep_movie_clips(value)
-
-    def _prepare(self):
+    def setUp(self):  # pylint: disable=invalid-name
         """
         For the GUI,  we need a way to 'prepare' the environment
         :return:
         """
         # pylint: disable=too-many-branches
-        self.print('Preparing the environment.')
+        self.print(f'Preparing the environment: Input: {self.input_folder} Output: {self.output_folder}')
+        if not self.output_folder.exists():
+            os.mkdir(self.output_folder)
+
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True
 
         if self.output_folder == self.input_folder:
-            if self.recreate:
-                assert False, f'Can not recreate with same input/output folders: {self.input_folder}\n\n'
             self.in_place = True
-
-        # Make sure we ignore these,  they came from us.
-        self.ignore_folders.append(self.output_folder.joinpath(self.image_movies_path_base))
-        self.ignore_folders.append(self.output_folder.joinpath(self.duplicate_path_base))
-        self.ignore_folders.append(self.output_folder.joinpath(self.migrated_path_base))
-        self.ignore_folders.append(self.output_folder.joinpath(self.small_base))
-
-        self.bad_parents.append(self.no_date_base)
-        self.bad_parents.append(self.image_movies_path_base)
-        self.bad_parents.append(self.duplicate_path_base)
-        self.bad_parents.append(self.migrated_path_base)
-        self.bad_parents.append(self.small_base)
 
         self.no_date_path = self.output_folder.joinpath(self.no_date_base)
         self.small_path = self.output_folder.joinpath(self.small_base)
+        self.migrated_path = self.output_folder.joinpath(self.migrated_path_base)
+        self.duplicate_path = self.output_folder.joinpath(self.duplicate_path_base)
+        self.image_movies_path = self.output_folder.joinpath(self.image_movies_path_base)
 
-        if self.keep_converted_files:
-            self.migrated_path = self.output_folder.joinpath(self.migrated_path_base)
+        # Make sure we ignore these,  they came from us.
+        self.ignore_folders.append(self.small_path)
+        self.ignore_folders.append(self.migrated_path)
+        self.ignore_folders.append(self.duplicate_path)
+        self.ignore_folders.append(self.image_movies_path)
 
-        if self.keep_duplicates:
-            self.duplicate_path = self.output_folder.joinpath(self.duplicate_path_base)
-
-        if self.keep_movie_clips:
-            self.image_movies_path = self.output_folder.joinpath(self.image_movies_path_base)
-
-        # Backup any previous attempts
-
-        if not self.recreate or self.in_place:  # Same root or importing from a new location
-
-            self._register_files(self.output_folder)
-
-        if self.recreate:
-            if self.output_folder.exists():
-                os.rename(self.output_folder, f'{self.output_folder}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}')
-
-        if not self.output_folder.exists():
-            os.mkdir(self.output_folder)
         if not self.no_date_path.exists():
             os.mkdir(self.no_date_path)
         if self.migrated_path and not self.migrated_path.exists():
             os.mkdir(self.migrated_path)
-        if self.duplicate_path and not  self.duplicate_path.exists():
+        if not self.duplicate_path.exists():
             os.mkdir(self.duplicate_path)
         if self.image_movies_path and not self.image_movies_path.exists():
             os.mkdir(self.image_movies_path)
@@ -306,9 +176,11 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         Cleaner.add_to_root_path(self.no_date_path)
 
-    def stop(self):
+        self._register_files(self.output_folder)
+
+    def tearDown(self):  # pylint: disable=invalid-name
         """
-        Only logically way when you have prepare and run
+        Only logically way when you have prepared and run
         :return:
         """
         if self.working_folder:
@@ -320,7 +192,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
 
-        self._prepare()
+        self.setUp()
         self.print('Registering existing images.')
         # Start it up.
         master = FolderCleaner(self.input_folder,
@@ -331,7 +203,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.print('Starting Imports.')
         await self.process_folder(master)
         await self._process_duplicate_files()
-        self.stop()
+        self.tearDown()
 
         # Clean up
         master.reset()
@@ -341,22 +213,22 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
     def _register_files(self, output_dir: Path):
         """
-        Take an inventory of all the existing files.    This allows us to easily detected duplicate files.
-        :param output_dir:  where we will be moving file to
+        Take an inventory of all the existing files. This allows us to easily detected duplicate files.
+        param output_dir where we will be moving file to
         :return:
         """
         for entry in output_dir.iterdir():
             if entry.is_dir():
                 try:
                     self._register_files(entry)
-                except PermissionError:  #pragma: no cover
+                except PermissionError:  # pragma: no cover
                     pass  # This can happen,  just ignore it
             else:
                 file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register(deep=False)
 
     def _folder_test(self, folder1, folder2) -> int:
         """
-        comapre two folders.   this is in the folderCleaner class but not much use for us with specialized folders
+        compare two folders.   this is in the folderCleaner class but not much use for us with specialized folders
         :param folder1:
         :param folder2:
         :return:
@@ -437,10 +309,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
             for item in entry.get_all_registered():
                 if item.path.suffix in PICTURE_FILES:
                     entry.de_register()
-                    if self.keep_movie_clips:
-                        entry.relocate_file(self.image_movies_path, remove=True, rollover=False, register=False)
-                    else:
-                        entry.path.unlink()
+                    entry.relocate_file(self.image_movies_path, remove=True, rollover=False, register=False)
                     break
 
     def _audit_folders(self, path: Path):
@@ -457,7 +326,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                     self.print(f'  Removing empty folder {entry}')
                     os.rmdir(entry)
                 elif size > WARNING_FOLDER_SIZE:
-                    self.suspicious_folders.append(entry)
                     self.print(f'  VERY large folder ({size}) found {entry}')
 
     def get_new_path(self, path_obj: Cleaner, is_duplicate: bool = False, preserve: bool = False) -> Optional[Path]:
@@ -472,8 +340,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         # pylint: disable=too-many-branches
         base = self.output_folder
         if is_duplicate:
-            if not self.duplicate_path:
-                return None
             base = self.duplicate_path
             if preserve:  # Used when processing duplicates, preserve the folder components
                 for part in path_obj.path.parent.parts[len(self.output_folder.parts):]:
@@ -486,7 +352,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         date = path_obj.date if path_obj.date else None
         description_path = None
         if path_obj.folder:
-            description_path = path_obj.folder.recursive_description_lookup(None, self.bad_parents)
+            description_path = path_obj.folder.recursive_description_lookup(None, [])
             if not date:
                 date = path_obj.folder.date
 
@@ -522,7 +388,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         Calculate new destination folder
         Test Duplicate status
 
-        :param entry: Cleaner object,  promoted to a subclass when processed
+        param entry: Cleaner object, promoted to a subclass when processed
         """
         self.increment_progress()
         await asyncio.sleep(0)
@@ -530,9 +396,10 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
             self.print(f'.... File {entry.path} is invalid.')
             return
 
-        new_entry = entry.convert(Path(self.working_folder.name), self.migrated_path, remove=self.remove_file(entry))
-        if id(new_entry) != id(entry):  # The file was converted and cleaned up
-            entry = new_entry  # work on the converted file
+        if self.do_convert:
+            new = entry.convert(Path(self.working_folder.name), self.migrated_path, remove=self.remove_file(entry))
+            if id(new) != id(entry):  # The file was converted and cleaned up
+                entry = new  # work on the converted file
 
         if entry.path.suffix.lower() not in PICTURE_FILES:
             if entry.path.suffix.lower() in MOVIE_FILES:
@@ -578,10 +445,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         # self.print(f'. Folder: {folder.path}')
         for entry in folder.path.iterdir():
-            if entry.is_dir() and entry not in self.ignore_folders:
+            if entry.is_dir() and entry not in self.ignore_folders:  # Includes APP folders like ..._small
                 this_folder = FolderCleaner(Path(entry), parent=folder, app_name=self.app_name)
-                if this_folder.description in self.bad_parents:
-                    this_folder.description = None
                 await self.process_folder(this_folder)
             elif entry.is_file():
                 await self.process_file(file_cleaner(entry, folder))

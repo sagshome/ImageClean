@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 
 DATE_SPEC = datetime(1961, 9, 27)
 DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
-
+DEFAULT_NAME = 'file.jpg'
 
 def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
     """
@@ -76,7 +76,7 @@ def create_image_file(path: Path, date: Union[datetime, None], text: str = None,
     """
 
     if not path.suffix:
-        path = path.joinpath('file.jpg')
+        path = path.joinpath(DEFAULT_NAME)
 
     if not path.parent.exists():
         makedirs(path.parent)
@@ -95,7 +95,7 @@ def create_image_file(path: Path, date: Union[datetime, None], text: str = None,
     return path
 
 
-def set_date(original_file: Path, new_date: Union[datetime, None]):
+def set_date(original_file: Path, new_date: Union[datetime, None]):  # pragma: no cover
     """
     Given a physical file,  move the file to the input directory
     original_file:  The file to process
@@ -103,6 +103,7 @@ def set_date(original_file: Path, new_date: Union[datetime, None]):
     move_to_input: If set,  copy the file to this location.
     :return: None
     """
+    # Note,  currently not used (replaced with create_image_file)
     exif_dict = load(str(original_file))
     if not new_date:
         if ImageIFD.DateTime in exif_dict['0th']:

@@ -2,14 +2,17 @@
 Command line call for Cleaning
 
 Goals.
-1. Convert HEIC files to JPG
-2. Any root file should move into a dated folder YEAR/MON/DATE
-3. Any file without date info,  should have date into added
-4. Clean up garbage
+1. Convert HEIC files to JPG  - Only if requested and only if on Linux systems
+    (macs support them,  windows can't process them)
+2. Any root folder file should move into a dated folder YEAR/MON/DATE
+3. SubFolders,  with a 'dated parent' should be imported with that date.  2002-02-02 Picnic / swimming / img01.jpg
+3. Any file without date info and not in a dated parent,  moves into - no date folder
+5. no date folder is always processed incase I set the date.
+4. garbage is ignored
 5. Clean up duplicates
 """
 # pylint: disable=line-too-long
-
+import asyncio
 import getopt
 import logging
 import os
@@ -25,26 +28,20 @@ from backend.image_clean import ImageClean  # pylint: disable=wrong-import-posit
 
 APP_PATH = Path(sys.argv[0])
 APP_NAME = APP_PATH.name[:len(APP_PATH.name) - len(APP_PATH.suffix)]
-LOGGER_NAME = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
 
+LOGGER_NAME = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff app names
 APP = ImageClean(LOGGER_NAME)  # Sets all default values
 
-APP_HELP = f'{APP_NAME} -hdmsaruPV -i <ignore_folder>... -n <non_description_folder>... -o <output> input_folder\n' \
-           f'Used to clean up directories.' \
-           f'\n\n-h: This help' \
-           f'\n-d: Save duplicate files into {APP.duplicate_path_base}' \
-           f'\n-m: Save movie-clips that are images (iphone live picture movies) into {APP.image_movies_path_base}' \
-           f'\n-c: Save original images that were successfully converted (HEIC) to JPG into {APP.migrated_path_base}' \
-           f'\n-a: Process all files,   ignore anything that is not an image' \
-           f'\n-r: Recreate the output folder (not valid without -o)' \
-           f'\n-s: safe import, keep original files when processed'\
-           f'\n-P: Paranoid,  -d, -m, -j, -s -x' \
-           f'\n-V: Verbose,  bather on to stdout' \
-           f'\n-o output folder - where to send the output to' \
-           f'\n-i ignore folder - if you find this folder name just ignore it' \
-           f'\n-n non parent folder - Usually images in a folder are saved with the folder, in this case we ' \
-           f'just want to ignore the parent,  example folder "Camera Uploads' \
-           f'\n\ninput folder - where to start the processing from' \
+APP_HELP = f'{APP_NAME} -hcrsv -i <import_folder> image_folder\n' \
+           '\n\n-h: This help' \
+           '\nThis application will reorganize image files into a folder structure that is human friendly' \
+           '\nGo to https://github.com/sagshome/ImageClean/wiki for details' \
+           f'\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the "{APP.migrated_path_base}" folder' \
+           '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed'\
+           f'\n-s: Check for small files (save in "{APP.small_base}" folder) - This WILL slow down processing' \
+           '\n-v: Verbose,  blather on to the terminal' \
+           '\n-i import folder - where we are importing from (default is just process image_folder)' \
+           '\n\nimage folder - where to image files are saved'
 
 log_file = Path.home().joinpath(f'{LOGGER_NAME}.log')  # pylint: disable=invalid-name
 if log_file.exists() and os.stat(log_file).st_size > 100000:
@@ -67,58 +64,57 @@ else:
     logger.setLevel(level=logging.ERROR)
 
 
+async def run():
+    """
+    This is needed to support async requirement of APP.run()
+    :return:
+    """
+    await APP.run()
+
+
 if __name__ == '__main__':
     # pylint: disable=invalid-name
     verbose = False
     start_time = datetime.now()
     logger.debug('Starting %s - %s', APP_NAME, start_time)
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hdmcsarPVo:i:n:', [])
+        opts, args = getopt.getopt(sys.argv[1:], 'hcrsvi:', [])
     except getopt.GetoptError:
         print(f'Invalid syntax: {sys.argv[1:]}\n\n')
         print(APP_HELP)
         sys.exit(2)
 
     if len(args) != 1:
-        print('Only one argument <input folder> is required.\n\n')
+        print('\nimage folder is required.\n\n')
         print(APP_HELP)
         sys.exit(2)
     else:
-        APP.input_folder = Path(args[0])
-        try:
-            os.stat(APP.input_folder)
-        except FileNotFoundError:
-            print(f'Input Folder: {APP.input_folder} is not found.   Critical error \n\n {APP_HELP}')
-            sys.exit(3)
+        APP.output_folder = Path(args[0])
 
-    output = None
+    input_folder = None
     for opt, arg in opts:
         if opt == '-h':
             print(APP_HELP)
             sys.exit(2)
-        elif opt == '-r':
-            APP.set_recreate(True)
-        elif opt == '-d':
-            APP.set_keep_duplicates(True)
-        elif opt == '-m':
-            APP.set_keep_movie_clips(True)
         elif opt == '-c':
-            APP.set_keep_converted_files(True)
+            APP.convert_files = True
+        elif opt == '-r':
+            APP.keep_original_files = False
         elif opt == '-s':
-            APP.set_keep_original_files(True)
-        elif opt == '-o':
-            output = arg
-        elif opt == '-i':
-            APP.add_ignore_folder(Path(arg))
-        elif opt == '-n':
-            APP.add_bad_parents(Path(arg))
-        elif opt == '-V':
+            APP.process_small_files = True
+        elif opt == '-v':
             verbose = APP.verbose = True
-        elif opt == '-P':
-            APP.set_paranoid(True)
+        elif opt == '-i':
+            try:
+                os.stat(arg)
+            except FileNotFoundError:
+                print(f'Import Folder: {arg} is not found.   Critical error \n\n {APP_HELP}')
+                sys.exit(3)
+            input_folder = Path(arg)
 
-    APP.output_folder = Path(output) if output else APP.input_folder
-    if verbose:
-        print(f'logging to...{log_file}')
-    APP.run()
+    APP.input_folder = APP.output_folder if not input_folder else input_folder
+    loop = asyncio.get_event_loop()
+
+    loop.run_until_complete(run())
+    loop.close()
     logger.debug('Completed (%s - %s)', datetime.now(), start_time)

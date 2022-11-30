@@ -43,6 +43,10 @@ root_path_list: List[str] = []  # some folders we have to ignore for folder comp
 PICTURE_FILES = ['.jpg', '.jpeg', '.tiff', '.tif', '.png', '.bmp', '.heic']
 MOVIE_FILES = ['.mov', '.avi', '.mp4']
 
+"""
+if len(sorted(Path('.').glob('**/*.HEIC'))) != 0:
+    print('foo')
+"""
 
 def file_cleaner(file: Path, folder: Optional[FolderCT]) -> Union[FileCT, ImageCT, FolderCT]:
     """
@@ -240,21 +244,21 @@ class Cleaner:
         directory does not exist abort!
         :return:
         """
-
-        new = None
+        rolled_over = None
+        new_file = None
         if new_path:
             if not new_path.exists():
                 os.makedirs(new_path)
-            new = new_path.joinpath(self.path.name)
-            if self.path == new:
-                logger.debug('Will not copy to myself %s', new)
+            new_file = new_path.joinpath(self.path.name)
+            if self.path == new_file:
+                logger.debug('Will not copy to myself %s', new_file)
                 return
-            if new.exists() and rollover:
-                logger.debug('Rolling over %s', new)
-                self.rollover_name(new)
+            if new_file.exists() and rollover:
+                logger.debug('Rolling over %s', new_file)
+                rolled_over = self.rollover_name(new_file)
             else:
-                logger.debug('Will not overwrite %s', new)
-            copyfile(str(self.path), new)
+                logger.debug('Will not overwrite %s', new_file)
+            copyfile(str(self.path), new_file)
 
         if remove:
             try:
@@ -263,8 +267,8 @@ class Cleaner:
             except OSError as error:
                 logger.debug('%s could not be removed (%s)', self.path, error)
 
-        if register and new:
-            self.path = new
+        if register and new_file:
+            self.path = rolled_over if rolled_over else new_file
             self.folder = file_cleaner(new_path, None)
             self.register()
 
@@ -340,7 +344,7 @@ class Cleaner:
         return
 
     @staticmethod
-    def rollover_name(destination: Path):
+    def rollover_name(destination: Path) -> Path:
         """
         Allow up to 20 copies of a file before removing the oldest
         file.type
@@ -349,13 +353,17 @@ class Cleaner:
         etc
         :return:
         """
+        newest = None
         if destination.exists():
             for increment in reversed(range(20)):  # 19 -> 0
                 old_path = destination.parent.joinpath(f'{destination.stem}_{increment}{destination.suffix}')
-                new_path = destination.parent.joinpath(f'{destination.stem}_{increment + 1}{destination.suffix}')
                 if old_path.exists():
+                    new_path = destination.parent.joinpath(f'{destination.stem}_{increment + 1}{destination.suffix}')
+                    if not new_path.exists():
+                        newest = new_path
                     os.rename(old_path, new_path)
             os.rename(destination, destination.parent.joinpath(f'{destination.stem}_0{destination.suffix}'))
+        return newest
 
     @classmethod
     def clear_caches(cls):
