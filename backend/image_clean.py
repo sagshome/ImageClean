@@ -247,7 +247,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
             if folder1_description and not folder2_description:
                 return GREATER
             if folder2_description and not folder1_description:
-                return LESSER  # pragma: no cover
+                return LESSER  # pragma: no cover  Custom folder stuff again
 
             if folder1.date and folder2.date:
                 if folder1.date > folder2.date:
@@ -401,7 +401,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         if self.do_convert:
             new = entry.convert(Path(self.working_folder.name), self.migrated_path, remove=self.remove_file(entry))
             if id(new) != id(entry):  # The file was converted and cleaned up
-                entry = new  # pragma: win work on the converted file
+                entry = new  # pragma: win   Windows does not do conversions
 
         if entry.path.suffix.lower() not in PICTURE_FILES:
             if entry.path.suffix.lower() in MOVIE_FILES:
@@ -421,7 +421,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 if value == entry:  # File contents are identical
                     if value.path == entry.path:
                         found = True
-                        if value.path.parent != new_path:
+                        if value.path.parent != new_path:  # pragma: no cover   Custom folders have been removed
                             self.print(f'.. File: {entry.path} existing file is relocating to {new_path}')
                             entry.relocate_file(new_path, register=True, remove=True)
                         break
