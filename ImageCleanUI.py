@@ -50,6 +50,7 @@ fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filenam
 fh.setFormatter(fh_formatter)
 logger.addHandler(fh)
 
+
 # The App will run in the background,  value and queue are used for some basic info passing
 cleaner_app = ImageClean(application_name, restore=True)  # save options over each run
 mp_processed_value = Value("i", 0)
@@ -68,7 +69,7 @@ if debugging:
 else:
     logger.setLevel(level=logging.ERROR)
 
-
+logger.debug('Debugging is live')
 def get_drives() -> dict:
     """
     On Windows systems return any drives,  this is not needed on Unix since we can navigate around from /
@@ -121,6 +122,7 @@ async def update_label(path: Path, which):
                 value += 1
     which += f' ({value})'
     print(f'{datetime.now()} {path}: {which.value}')
+
 
 async def run_application():
     master = FolderCleaner(cleaner_app.input_folder,
@@ -256,6 +258,8 @@ class Progress(Widget):
         self.progress_text.text = new_text
 
         if self.task and self.task.done():
+            if self.task.exception():
+                logger.error(self.task.exception())
             self.updates.cancel()
             self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             calculate_size(cleaner_app.output_folder, mp_output_count)

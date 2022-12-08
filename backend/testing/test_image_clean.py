@@ -61,6 +61,31 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         # print(f'{str(self)} - {self.temp_base.name}')
 
     @patch('pathlib.Path.home')
+    async def test_duplicate_7(self, home):
+        """
+        Is Registered (existed)
+        File contents/names are identical
+        paths are the same
+
+            if not entry.is_registered():
+            self.print(f'.. File: {entry.path} new file is relocating to {new_path}')
+            entry.relocate_file(new_path, register=True, remove=self.remove_file(entry))
+        else:
+            found = False
+            all_entries = deepcopy(entry.get_all_registered())  # save it, in case something new becomes registered
+            for value in all_entries:
+                if value == entry:  # File contents are identical
+                    if value.path == entry.path:
+                        found = True
+                        if value.path.parent != new_path:
+                            self.print(f'.. File: {entry.path} existing file is relocating to {new_path}')
+                            entry.relocate_file(new_path, register=True, remove=True)
+                        break
+
+
+        """
+
+    @patch('pathlib.Path.home')
     async def test_rollover_again(self, home):
         """
         ./Input/file.jpg

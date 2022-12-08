@@ -18,7 +18,6 @@ sys.path.append('.')
 # pylint: disable=import-error wrong-import-position
 from backend.cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
 
-
 logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
 
 NEW_FILE: int = 0
@@ -176,7 +175,9 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         Cleaner.add_to_root_path(self.no_date_path)
 
+        logger.debug('Registration is Starting')
         self._register_files(self.output_folder)
+        logger.debug('Registration is completed')
 
     def tearDown(self):  # pylint: disable=invalid-name
         """
@@ -192,8 +193,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         This will call all the methods to do a run.    The GUI,  will need to do this as well
         """
 
-        self.setUp()
         self.print('Registering existing images.')
+        self.setUp()
         # Start it up.
         master = FolderCleaner(self.input_folder,
                                parent=None,
@@ -273,6 +274,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 for outer in range(len(entries[entry])):
                     this = entries[entry][outer]
                     if this:
+                        self.print(f'Potential Duplicate with Key {entry}')
                         if str(this.path).startswith(str(self.duplicate_path)):  # pragma: no cover
                             continue  # This is already flagged as a duplicate
                         new_path = self.get_new_path(this)
@@ -423,7 +425,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                             self.print(f'.. File: {entry.path} existing file is relocating to {new_path}')
                             entry.relocate_file(new_path, register=True, remove=True)
                         break
-
                     # These identical files are stored in different paths.
                     if value.path.parent == new_path:  # A copy already exists where we should be
                         found = True
@@ -443,12 +444,14 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         :param folder:
         :return:
         """
-        # self.print(f'. Folder: {folder.path}')
+        self.print(f'. Folder: {folder.path}')
         for entry in folder.path.iterdir():
             if entry.is_dir() and entry not in self.ignore_folders:  # Includes APP folders like ..._small
                 this_folder = FolderCleaner(Path(entry), parent=folder, app_name=self.app_name)
                 await self.process_folder(this_folder)
             elif entry.is_file():
+                self.print(f'. File: {entry}')
+                logger.debug('Processing File:%s', entry)
                 await self.process_file(file_cleaner(entry, folder))
 
     def remove_file(self, obj: Union[FileCleaner, ImageCleaner]) -> bool:
