@@ -193,6 +193,19 @@ class ImageCleanerTests(Cleaners):
             _ = invalid_image.get_date_from_image()
             self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Failed to load {invalid_image.path} - File not Found')
 
+    def test_os_image_error(self):
+        image_error = ImageCleaner(Path('fake_faker_fakest.jpg'), None)
+        with self.assertLogs('Cleaner', level='DEBUG') as logs:
+            image_error.open_image()
+            self.assertTrue(logs.output[0].startswith('DEBUG:Cleaner:open_image OSError'),  image_error.path.name)
+
+    def test_os_image_error_not_found(self):
+        image_error = ImageCleaner(Path('fake_faker_fakest.jpg'), None)
+        with self.assertLogs('Cleaner', level='ERROR') as logs:
+            result = image_error == image_error  # pylint: disable=comparison-with-itself
+            self.assertTrue(logs.output[0].startswith(f'ERROR:Cleaner:File {image_error.path.name}'),  "Doesn't exist.")
+        self.assertFalse(result, 'Compare to non-existent file should fail')
+
     def test_image_data(self):
         # pylint: disable=protected-access
         self.assertListEqual(self.jpg_obj._image_data, [], "Image data should be empty")

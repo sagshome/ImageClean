@@ -145,7 +145,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
-            self.force_keep = True
+            self.force_keep = True  # pragma: win
 
         if self.output_folder == self.input_folder:
             self.in_place = True
@@ -401,7 +401,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         if self.do_convert:
             new = entry.convert(Path(self.working_folder.name), self.migrated_path, remove=self.remove_file(entry))
             if id(new) != id(entry):  # The file was converted and cleaned up
-                entry = new  # work on the converted file
+                entry = new  # pragma: win work on the converted file
 
         if entry.path.suffix.lower() not in PICTURE_FILES:
             if entry.path.suffix.lower() in MOVIE_FILES:
@@ -463,7 +463,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         if str(obj.path).startswith(str(self.input_folder)):
             # This file is on the input path
-            if self.force_keep:
+            if self.force_keep:  # pragma: win
                 return False
             if self.keep_original_files:
                 return False

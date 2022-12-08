@@ -264,7 +264,7 @@ class Cleaner:
             try:
                 self.de_register(silent=True)
                 os.unlink(self.path)
-            except OSError as error:
+            except OSError as error:  # pragma: win
                 logger.debug('%s could not be removed (%s)', self.path, error)
 
         if register and new_file:
@@ -463,8 +463,12 @@ class ImageCleaner(Cleaner):
         :return:
         """
         if self.__class__ == other.__class__:
-            if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
-                return True
+            try:
+                if self.path.name == other.path.name and os.stat(self.path).st_size == os.stat(other.path).st_size:
+                    return True
+            except FileNotFoundError:
+                logger.error('File %s or %s does not exists', self.path, other.path)
+                return False
             # Try the hard way
             self.load_image_data()
             other.load_image_data()
@@ -576,7 +580,7 @@ class ImageCleaner(Cleaner):
         self.load_image_data()
         return self._image_data
 
-    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:
+    def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> ImageCT:  # pragma: win
         """
         Convert HEIC files to jpg files.   Do the conversion in the run_path since we shouldn't update existing dir.
 
