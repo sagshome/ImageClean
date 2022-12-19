@@ -27,9 +27,9 @@ from Utilities.test_utilities import DIR_SPEC, DATE_SPEC, DEFAULT_NAME
 
 class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
     """
-    Create real world scenerio's for testing.   This is perhaps not unit tests but system tests
+    Create real world scenario's for testing.   This is perhaps not unit tests but system tests
 
-    These tests cover all the duplicate scenerios
+    These tests cover all the duplicate scenarios
 
 
     """
@@ -152,7 +152,6 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
         self.assertTrue(file.exists())
 
-
     @patch('pathlib.Path.home')
     async def test_restart_no_changes4(self, home):
         """
@@ -177,7 +176,8 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
                              keep_orginals=False, verbose=False)
         await cleaner.run()
 
-        self.assertTrue(self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom').joinpath('image.jpg').exists())
+        self.assertTrue(self.input_folder.joinpath(str(DATE_SPEC.year)).joinpath('custom').
+                        joinpath('image.jpg').exists())
 
     @patch('pathlib.Path.home')
     async def test_restart_no_changes(self, home):
@@ -223,7 +223,6 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(date_custom.exists())
         self.assertTrue(name_custom.exists())
         self.assertTrue(struct_custom.exists())
-
 
     @patch('pathlib.Path.home')
     async def test_jpg_files(self, home):
@@ -463,7 +462,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(count_files(self.output_folder), 2)
 
     @patch('pathlib.Path.home')
-    async def test_dup_jpg_files_with_dups(self, home):
+    async def test_duplicate_jpg_files_with_duplicates(self, home):
         """
             ./Input/jpeg_image.jpg  <- Internal Date
             ./Input/1961/9/27/jpeg_image.jpg
@@ -506,9 +505,11 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
                              keep_originals=False, verbose=False)
         await cleaner.run()
 
-        self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).joinpath(internal_date.name).exists())
+        self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).
+                        joinpath(internal_date.name).exists())
 
-        self.assertTrue(cleaner.duplicate_path.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).joinpath(internal_date.name).exists())
+        self.assertTrue(cleaner.duplicate_path.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).
+                        joinpath(internal_date.name).exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath('jpeg_image.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(DIR_SPEC).joinpath('jpeg_image_0.jpg').exists())
         self.assertTrue(cleaner.duplicate_path.joinpath(cleaner.no_date_base).joinpath('no_date.jpg').exists())
@@ -521,7 +522,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
     @patch('pathlib.Path.home')
     async def test_dup_jpg_files_earlier_date(self, home):
         """
-            Date storage is based on the earlier of folder dates is no dates on images
+            Date storage is based on the earliest of folder dates is no dates on images
 
             ./Input/jpeg_image
             ./Input/1961/9/27/jpeg_image.jpg
@@ -1064,6 +1065,7 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
                 found = True
                 break
         self.assertTrue(found, 'Very large folder not found')
+
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()

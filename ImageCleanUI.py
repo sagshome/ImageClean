@@ -1,3 +1,6 @@
+"""
+UI for cleaning images
+"""
 import asyncio
 import logging
 import os
@@ -11,6 +14,7 @@ from datetime import datetime
 
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 
+# pylint: disable=wrong-import-position, missing-function-docstring
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -21,14 +25,15 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 
 sys.path.append('.')
-from backend.cleaner import FileCleaner, FolderCleaner
-from backend.image_clean import ImageClean
+from backend.cleaner import FileCleaner, FolderCleaner  # pylint: disable=import-error
+from backend.image_clean import ImageClean  # pylint: disable=import-error
 
 application_name = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
 
 app_path = Path(sys.argv[0])
 run_path = Path(Path.home().joinpath(f'.{application_name}'))
-os.mkdir(run_path) if not run_path.exists() else None
+if not run_path.exists():
+    os.mkdir(run_path)
 
 log_file = run_path.joinpath('logfile')
 results_file = run_path.joinpath(f'{application_name}.results')
@@ -70,6 +75,8 @@ else:
     logger.setLevel(level=logging.ERROR)
 
 logger.debug('Debugging is live')
+
+
 def get_drives() -> dict:
     """
     On Windows systems return any drives,  this is not needed on Unix since we can navigate around from /
@@ -77,7 +84,7 @@ def get_drives() -> dict:
     """
     drives = {}
     if platform.system() == 'Windows':
-        import win32api
+        import win32api  # pylint: disable=import-outside-toplevel
 
         for letter in [i for i in win32api.GetLogicalDriveStrings().split('\x00') if i]:
             data = win32api.GetVolumeInformation(f'{letter}\\')
@@ -133,11 +140,11 @@ async def run_application():
     master.description = None
     await cleaner_app.run()
 
-    # root_folder=cleaner_app.no_date_path))
+    # root_folder=cleaner_app.no_date_path
     # suspicious_folders = cleaner_app.audit_folders(cleaner_app.output_folder)
     # if suspicious_folders:
     #     self.override_print('_', 'The following folders where found to contain a large number of files,  '
-    #                              'thus they are suspicious\n')
+    #                              'thus they are suspicious\n'
     #     for folder in suspicious_folders:
     #         self.override_print('_', folder)
 
@@ -237,11 +244,9 @@ class Progress(Widget):
         """
         This will run at a present interval (ActionBox.start_processing) and update the progress bar and the text
         output.  When the child process dies,  update the summary text with useful information.
-        :param _:  It is the time since the last clock interval.   Not used
+        :param: _:  It is the time since the last clock interval.   Not used
         :return:
         """
-
-
         # Update progress bar
         self.progress_bar.value = mp_processed_value.value
 
@@ -264,9 +269,9 @@ class Progress(Widget):
             self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             calculate_size(cleaner_app.output_folder, mp_output_count)
             self.progress_text.text += f"Summary:\n\nInput Folder: {cleaner_app.input_folder} " \
-                                         f"Input File Count: {mp_input_count.value}\n" \
-                                         f"Output Folder: {cleaner_app.output_folder} " \
-                                         f"Output File Count: {mp_output_count.value}"
+                                       f"Input File Count: {mp_input_count.value}\n" \
+                                       f"Output Folder: {cleaner_app.output_folder} " \
+                                       f"Output File Count: {mp_output_count.value}"
 
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
 
@@ -305,9 +310,9 @@ class Progress(Widget):
 
 
 class FolderSelector(BoxLayout):
-    '''
+    """
     Provide a get (for input_label_value) and optionally set/callback function for each checkbox item
-    '''
+    """
 
     input_label_value = StringProperty('')
     show_new_button = NumericProperty(1)
@@ -351,22 +356,24 @@ class FolderSelector(BoxLayout):
         self._popup2.open()
 
     def on_enter(self, value):
+        new_path = None
         if not value.text:
-            dismiss_dialog("You must enter a value for the new folder name,   select cancel if you changed your mind")
+            dismiss_dialog("Value Missing",
+                           "You must enter a value for the new folder name,   select cancel if you changed your mind")
         else:
             new_path = Path(self.new_base).joinpath(value.text)
 
-        try:
-            os.mkdir(new_path) if not new_path.exists() else None
-            cleaner_app.output_folder = Path(new_path)
-            self.input_label_value = str(new_path)
-            self._popup2.dismiss()
-            self._popup.dismiss()
-        except PermissionError:
-            dismiss_dialog('New Folder Error',
-                           f"We are unable to create the new folder {new_path}. \n\n"
-                           f"This is usually due to a permission problem.    Make sure you actually select a folder\n"
-                           f"before you make a new 'child' folder\n")
+            try:
+                os.mkdir(new_path) if not new_path.exists() else None
+                cleaner_app.output_folder = Path(new_path)
+                self.input_label_value = str(new_path)
+                self._popup2.dismiss()
+                self._popup.dismiss()
+            except PermissionError:
+                dismiss_dialog('New Folder Error',
+                               f"We are unable to create the new folder {new_path}. \n\n"
+                               f"This is usually due to a permission problem.  Make sure you actually select a folder\n"
+                               f"before you make a new 'child' folder\n")
 
     def have_drives(self):
         if len(self.drives) < 2:
@@ -393,10 +400,10 @@ class FolderSelector(BoxLayout):
         self._popup2.open()
 
     def get_input(self):
-        '''
+        """
         Getters should return the label value for the UI and set self.load_base for future load functions
         :return:
-        '''
+        """
         value = cleaner_app.input_folder if cleaner_app.input_folder else Path.home()
         self.input_label_value = str(value)
         self.load_base = str(value.parent)
@@ -425,28 +432,27 @@ class Main(BoxLayout):
     input_task = ObjectProperty()
     output_task = ObjectProperty()
 
-    #def __init__(self, **kwargs):
-    #    super(Main, self).__init__(**kwargs)
-
+    # def __init__(self, **kwargs):
+    #     super(Main, self).__init__(**kwargs)
 
     @staticmethod
     def help():
         print('foobar')
         dismiss_dialog('Help',
-                       f"ImageClean: Organize images based on dates and custom folder names.  The date format is:\n"
-                       f"  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
-                       f"  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n"
-                       f"       This structure should help you find your pictures much easier\n\n"
-                       f"Input Folder is where the images will be loaded from\n"
-                       f"Output Folder is where they will be stored - it can be the same as Input Folder\n\n"
-                       f"Options\n"
-                       f"Recreate: The output folder will be replaced \n"
-                       f"Keep options - files that would normally be erased after they are relocated, "
-                       f"Paranoid sets these.\n"
-                       f"Add a folder to Ignore - This allows you to skip sub-folders of the Input Folder\n"
-                       f"Add a folder NAME to Ignore - This is used to prevent custom names from being used,  "
-                       f"the images\nare still processed, but with the example above 'Florida', would not be used as a"
-                       f"custom folder name\n"
+                       "ImageClean: Organize images based on dates and custom folder names.  The date format is:\n"
+                       "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
+                       "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n"
+                       "       This structure should help you find your pictures much easier\n\n"
+                       "Input Folder is where the images will be loaded from\n"
+                       "Output Folder is where they will be stored - it can be the same as Input Folder\n\n"
+                       "Options\n"
+                       "Recreate: The output folder will be replaced \n"
+                       "Keep options - files that would normally be erased after they are relocated, "
+                       "Paranoid sets these.\n"
+                       "Add a folder to Ignore - This allows you to skip sub-folders of the Input Folder\n"
+                       "Add a folder NAME to Ignore - This is used to prevent custom names from being used,  "
+                       "the images\nare still processed, but with the example above 'Florida', would not be used as a"
+                       "custom folder name\n"
                        )
 
     @staticmethod
@@ -487,9 +493,10 @@ class ImageCleanApp(App):
         return Main()
 
     def app_func(self):
-        '''This will run both methods asynchronously and then block until they
+        """
+        This will run both methods asynchronously and then block until they
         are finished
-        '''
+        """
         # self.other_task = asyncio.ensure_future(self.waste_time_freely())
 
         async def run_wrapper():

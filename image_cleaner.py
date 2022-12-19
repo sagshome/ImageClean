@@ -44,7 +44,7 @@ APP_HELP = f'{APP_NAME} -hcrsv -i <import_folder> image_folder\n' \
            '\n\nimage folder - where to image files are saved'
 
 log_file = Path.home().joinpath(f'{LOGGER_NAME}.log')  # pylint: disable=invalid-name
-if log_file.exists() and os.stat(log_file).st_size > 100000:
+if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
     FileCleaner.rollover_name(log_file)
 
 logger = logging.getLogger(LOGGER_NAME)  # pylint: disable=invalid-name
@@ -54,7 +54,7 @@ FH_FORMATTER = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filenam
 FH.setFormatter(FH_FORMATTER)
 logger.addHandler(FH)  # pylint: disable=invalid-name
 
-if os.getenv(f'{LOGGER_NAME.upper()}_DEBUG'):
+if os.getenv(f'{LOGGER_NAME.upper()}_DEBUG'):  # pragma: no cover
     # pylint: disable=invalid-name
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
@@ -64,7 +64,7 @@ else:
     logger.setLevel(level=logging.ERROR)
 
 
-async def run():
+async def run():  # pragma: no cover
     """
     This is needed to support async requirement of APP.run()
     :return:
@@ -72,17 +72,18 @@ async def run():
     await APP.run()
 
 
-if __name__ == '__main__':
-    # pylint: disable=invalid-name
-    verbose = False
-    start_time = datetime.now()
-    logger.debug('Starting %s - %s', APP_NAME, start_time)
+def main(arg_strings=None):
+    """
+    Main program
+    :param arg_strings: sys.argv
+    :return: None
+    """
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hcrsvi:', [])
+        opts, args = getopt.getopt(arg_strings[1:], 'hcrsvi:', [])
     except getopt.GetoptError:
         print(f'Invalid syntax: {sys.argv[1:]}\n\n')
         print(APP_HELP)
-        sys.exit(2)
+        sys.exit(4)
 
     if len(args) != 1:
         print('\nimage folder is required.\n\n')
@@ -103,7 +104,7 @@ if __name__ == '__main__':
         elif opt == '-s':
             APP.process_small_files = True
         elif opt == '-v':
-            verbose = APP.verbose = True
+            APP.verbose = True
         elif opt == '-i':
             try:
                 os.stat(arg)
@@ -113,8 +114,17 @@ if __name__ == '__main__':
             input_folder = Path(arg)
 
     APP.input_folder = APP.output_folder if not input_folder else input_folder
-    loop = asyncio.get_event_loop()
 
+
+if __name__ == '__main__':  # pragma: no cover
+    start_time = datetime.now()
+
+    logger.debug('Starting (%s - %s)', datetime.now(), start_time)
+
+    main(sys.argv)
+
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(run())
     loop.close()
+
     logger.debug('Completed (%s - %s)', datetime.now(), start_time)

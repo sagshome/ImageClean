@@ -2,7 +2,6 @@
 
 from kivy_deps import sdl2, glew
 
-
 block_cipher = None
 
 
@@ -31,7 +30,7 @@ exe = EXE(
     a.datas,
     *[Tree(p) for p in (sdl2.dep_bins + glew.dep_bins)],
     [],
-    name='importer',
+    name='PhotoManager',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

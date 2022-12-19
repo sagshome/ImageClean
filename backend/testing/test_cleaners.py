@@ -504,7 +504,7 @@ class ImageCleanerTests(Cleaners):
 
 class FileTests(Cleaners):
     """
-    some of the data is dependent on folders so we will test > < and date functions with folders
+    some data is dependent on folders, so we will test > < and date functions with folders
     """
 
     def test_compare(self):

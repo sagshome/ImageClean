@@ -594,7 +594,7 @@ class ImageCleaner(Cleaner):
 
         :param work_dir: Working directory to store temporary working files
         :param migrated_base:  Where (if any) to archive originals to
-        :param in_place: default: True,  remove this file
+        :param remove: default: True,  remove this file
 
         :return: self or a new object that's updated
 
