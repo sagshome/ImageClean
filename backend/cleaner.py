@@ -264,7 +264,7 @@ class Cleaner:
             try:
                 self.de_register(silent=True)
                 os.unlink(self.path)
-            except OSError as error:  # pragma: win
+            except OSError as error:   # pragma: escape_win
                 logger.debug('%s could not be removed (%s)', self.path, error)
 
         if register and new_file:
@@ -294,6 +294,7 @@ class Cleaner:
             :param array_max:
             :return:
             """
+
             re_parse = re.match(regexp, self.path.stem)
             if re_parse:
                 re_array = re_parse.groups()

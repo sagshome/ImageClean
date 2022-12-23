@@ -28,6 +28,9 @@ sys.path.append('.')
 from backend.cleaner import FileCleaner, FolderCleaner  # pylint: disable=import-error
 from backend.image_clean import ImageClean  # pylint: disable=import-error
 
+if platform.system() == 'Windows':
+    import win32timezone
+
 application_name = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
 
 app_path = Path(sys.argv[0])
@@ -180,7 +183,7 @@ class CheckBoxItem(BoxLayout):
 
     @staticmethod
     def set_keep_originals(touch):
-        cleaner_app.set_keep_original_files(touch)
+        cleaner_app.keep_original_files = touch
         logger.debug(f'keep_originals is {touch}')
 
 
@@ -291,7 +294,7 @@ class Progress(Widget):
     def abort(self):
         if self.task and not self.task.done():
             self.task.cancel('Aborted')
-        exit(0)
+        sys.exit(0)
 
     def override_print(self, _, text):
         """

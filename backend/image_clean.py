@@ -211,6 +211,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self._process_duplicates_movies()
         self.print('Auditing folders.')
         self._audit_folders(self.output_folder)
+        if self.output_folder != self.output_folder and not self.keep_original_files:
+            self._audit_folders(self.input_folder)
 
     def _register_files(self, output_dir: Path):
         """
@@ -268,6 +270,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         # pylint: disable=too-many-nested-blocks
         self.print('Processing any duplicate files.')
+        # This deepcopy is very slow!
         entries = deepcopy(Cleaner.get_hash())
         for entry in entries:
             if len(entries[entry]) > 1:
@@ -297,6 +300,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                             if new_path.joinpath(this.path.name).exists():
                                 new_path = self.get_new_path(this, is_duplicate=True, preserve=True)
                             this.relocate_file(new_path, remove=self.remove_file(this))
+        self.print('Duplicate processing completed')
 
     def _process_duplicates_movies(self):
         """
