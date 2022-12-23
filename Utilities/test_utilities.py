@@ -14,6 +14,7 @@ DATE_SPEC = datetime(1961, 9, 27)
 DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
 DEFAULT_NAME = 'file.jpg'
 
+
 def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
     """
 

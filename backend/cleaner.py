@@ -250,7 +250,7 @@ class Cleaner:
             if not new_path.exists():
                 os.makedirs(new_path)
             new_file = new_path.joinpath(self.path.name)
-            if self.path == new_file:
+            if self.path == new_file:  # pragma: no cover
                 logger.debug('Will not copy to myself %s', new_file)
                 return
             if new_file.exists() and rollover:

@@ -39,7 +39,7 @@ if __name__ == '__main__':  # pragma: no cover
     # os.system(f'pylint --rcfile={pylint_file} backend Utilities image_cleaner.py ImageCleanUI.py')
     result += os.system(f'pylint --rcfile={pylint_file} backend Utilities image_cleaner.py')
     result += os.system('coverage report --fail-under=100 -m')
-    if result == 0:
+    if result == 0:  # Pyinstaller fails when running fake ubuntu - Minimum required OpenGL version (2.0) NOT found!
         result += os.system('pyinstaller cleaner_cron.spec')
         result += os.system(f'pyinstaller {installer}')
     if result != 0:
