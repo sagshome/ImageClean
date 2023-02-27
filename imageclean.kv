@@ -11,18 +11,15 @@
     callback: None
     check_value: False
     size_hint: 1.0, None
-    # height: 50
     BoxLayout:
         orientation: 'horizontal'
         CheckBox:
-            size_hint_x: 0.5
-            pos_hint: {'right': 1, 'center': 0.5}
+            size_hint: 0.3, 1.0
+            pos_hint: {'center': 0.5, 'center': 0.5}
             active: root.check_value
             on_active: root.selected(self)
         Label:
-            padding: 20, 15
-            size_hint_x: 0.85
-            pos_hint: {'center': 1}
+            padding: 0, 15
             texture_size: self.size
             text_size: self.size
             halign: 'left'
@@ -54,16 +51,14 @@
     clear_callback: None
     default_scrolling: False
 
-    size_hint_y: .3
     text: ''
     BoxLayout:
         orientation: 'horizontal'
         Button:
             text: root.input_button_text
             background_color: utils.get_color_from_hex('#E9F20D')
-            width: 100
-            size_hint: 0.3, 1.0
-            #pos_hint: {'center': 1}
+            size_hint: None, None
+            size: 225, 45
             on_press: root.show_load()
         Label:
             id: label_value
@@ -75,93 +70,157 @@
             padding: 10, 15
         Button:
             id: Drives
+            size_hint: None, None
+            size: 225, 45
             opacity: root.have_drives()
             text: "Change Drive"
-            size_hint: 0.3, 1.0
             background_color: utils.get_color_from_hex('#99CCFF')
             on_press: root.change_drives()
 
+<ButtonBox>:
+    size_hint: 1.0, .1
+    Button:
+        id: _button_box
+        size_hint: None, None
+        size: 225, 45
+        pos_hint: {'center_x': 0.5, 'bottom':1.0}
+        text: "Abort"
+        background_color: utils.get_color_from_hex('#FF0000')
+        on_release: root.parent.exit(1)
+
 <ActionBox>:
     size_hint: 1.0, .1
-    orientation: 'horizontal'
     Button:
+        id: left
+        size_hint: None, None
+        size: 225, 45
+        pos_hint: {'left': 1.0, 'bottom': 1.0}
         text: "Go"
         background_color: utils.get_color_from_hex('#00FF00')
         on_press: root.start_processing()
     Button:
+        id: right
         text: "Cancel"
+        size_hint: None, None
+        size: 225, 45
+        pos_hint: {'right': 1.0, 'bottom': 3.0}
         background_color: utils.get_color_from_hex('#FF0000')
-        on_release: root.parent.exit(1)
+        on_release: root.parent.exit(2)
+
+<ExitBox>:
+    size_hint: 1.0, .1
+    id: ExitBox
+    size_hint: 1.0, .2
+    orientation: 'horizontal'
+    Button:
+        id: left
+        size_hint: None, None
+        size: 225, 45
+        pos_hint: {'left': 1.0, 'bottom': 1.0}
+        text: "Exit"
+        background_color: utils.get_color_from_hex('#FF0000')
+        on_press: root.parent.exit(0)
+    Button:
+        id: right
+        size_hint: None, None
+        size: 225, 45
+        pos_hint: {'right': 1.0, 'bottom': 3.0}
+        text: "Import Another"
+        background_color: utils.get_color_from_hex('#99CCFF')
+        on_release: root.restart()
 
 <Main>:
-    orientation: 'vertical'
-    BoxLayout:
-        size_hint_y: .1
-        orientation: 'horizontal'
-        Button:
-            text: 'Help'
-            background_color: utils.get_color_from_hex('#00FF00')
-            size_hint_x: 0.3
-            on_press: root.help()
-        Label:
-            text: "Welcome to Photo Manager,   photo storage,  Simplified"
-        Button:
-            background_color: utils.get_color_from_hex('#00FF00')
-            text: 'About'
-            size_hint_x: 0.3
-            on_press: root.about()
+    Button:
+        size_hint: None, None
+        size: 225, 30
+        pos_hint: {'left': 1.0, 'top': 1.0}
+        text: 'Help'
+        background_color: utils.get_color_from_hex('#00FFFF')
+        on_press: root.help()
+    Label:
+        size_hint: 0.6, .05
+        pos_hint: {'center_x': 0.5, 'top':1.0}
+        text: "Welcome to Photo Manager,   photo storage,  Simplified"
+    Button:
+        background_color: utils.get_color_from_hex('#00FFFF')
+        text: 'About'
+        size_hint: None, None
+        size: 225, 30
+        pos_hint: {'right': 1, 'top': 1.0}
+        on_press: root.about()
     FolderSelector:
         id: input_folder
-        size_hint_y: .15
+        size_hint: 1, .1
+        pos_hint: {'x': 0.0, 'top': 0.975}
         input_button_text: 'Import Images From:'
         get_label_value: self.get_input()
         load_callback: self.set_input
         show_new_button: 0
     FolderSelector:
         id: output_folder
-        size_hint_y: .15
+        size_hint: 1, .1
+        pos_hint: {'x': 0.0, 'top': 0.900}
         input_button_text: 'Save Images To:'
         get_label_value: self.get_output()
         load_callback: self.set_output
         show_new_button: 1
-    CheckBoxItem:
-        size_hint_y: .15
-        text: "Keep Originals - Don't remove original files!"
-        check_value: True
-        callback: self.set_keep_originals
-    Progress:
-        id: Progress
+    Options:
     ActionBox:
-        id: ActionBox
-        size_hint_y: 0.15
 
-<Progress>:
-    progress_bar: progress_bar
-    progress_text: progress_text
-    exit_button: exit_button
+<Options>:
+    size_hint: 1, .4
+    pos_hint: {'x':0.0, 'top': 0.800}
     BoxLayout:
         orientation: 'vertical'
         size: root.width, root.height
+        CheckBoxItem:
+            id: cb_keep
+            size_hint_y: .15
+            text: "Keep Originals - Don't remove original files!"
+            check_value: self.value_keep_originals()
+            callback: self.set_keep_originals
+        CheckBoxItem:
+            id: cb_dups
+            size_hint_y: .15
+            text: "Look for Duplicates - Slower Processing but check for duplicate files!"
+            check_value: self.value_process_duplicates()
+            callback: self.set_process_duplicates
+        CheckBoxItem:
+            id: cb_small
+            size_hint_y: .15
+            text: "Look for Thumbnails - If you find tiny images,  moved them to a 'small' folder!"
+            check_value: self.value_process_small()
+            callback: self.set_process_small
+        CheckBoxItem:
+            id: cb_convert
+            size_hint_y: .15
+            text: "Convert HEIC files - Convert proprietary apple format to JPEG!"
+            check_value: self.value_do_convert()
+            callback: self.set_do_convert
+        CheckBoxItem:
+            id: import_folders
+            size_hint_y: .15
+            text: "Preserve Folders - On image import, check for descriptive folder names"
+            check_value: self.value_set_folders()
+            callback: self.set_check_folders
+
+<Progress>:
+    size_hint: 1, .725
+    pos_hint: {'x':0.0, 'top': 0.8}
+    progress_bar: progress_bar
+    progress_text: progress_text
+    BoxLayout:
+        orientation: 'vertical'
         Label:
             size_hint_y:.05
-            # halign: 'center'
             text: "Progress"
         ProgressBar:
             id: progress_bar
-            #max: app.input_files
             pos_hint: {'x': .1}
             size_hint_x: .8
             size_hint_y: .1
         TextInput:
             id: progress_text
-        Button:
-            id: exit_button
-            size_hint_y: .1
-            text: "Abort"
-            background_color: utils.get_color_from_hex('#FF0000')
-            on_release:
-                root.abort()
-
 
 <DismissDialog>:
     # Reusable dialog to display warnings/errors/info

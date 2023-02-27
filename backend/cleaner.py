@@ -162,7 +162,7 @@ class Cleaner:
 
     def de_register(self, silent=False):
         """
-        Remove yourself from the the list of registered FileClean objects
+        Remove yourself from the list of registered FileClean objects
         """
         if not self.is_registered(by_path=True):
             if not silent:
@@ -255,10 +255,13 @@ class Cleaner:
                 return
             if new_file.exists() and rollover:
                 logger.debug('Rolling over %s', new_file)
-                rolled_over = self.rollover_name(new_file)
+                rolled_over = self.rollover_file(new_file)
             else:
                 logger.debug('Will not overwrite %s', new_file)
-            copyfile(str(self.path), new_file)
+            try:
+                copyfile(str(self.path), new_file)
+            except PermissionError as error:
+                logger.error('Can not write to %s - %s', new_path, error)
 
         if remove:
             try:
@@ -345,7 +348,7 @@ class Cleaner:
         return
 
     @staticmethod
-    def rollover_name(destination: Path) -> Path:
+    def rollover_file(destination: Path) -> Path:
         """
         Allow up to 20 copies of a file before removing the oldest
         file.type
@@ -372,9 +375,19 @@ class Cleaner:
         Get rid of all that cheesy persistent class data
         :return:
         """
+
+        cls.reset()
+        duplicate_hash.clear()
+
+    @classmethod
+    def reset(cls):
+        """
+        clear the global root_path_list
+        :return:
+        """
         while root_path_list:
             root_path_list.pop()
-        duplicate_hash.clear()
+
 
     @classmethod
     def add_to_root_path(cls, some_path: Path):
@@ -605,6 +618,7 @@ class ImageCleaner(Cleaner):
             return self
 
         if platform.system() == 'Windows':
+            # This option is not supported via GUI so no one should see this logger.error
             logger.error('Conversion from HEIC is not supported on Windows')
             return self
 
@@ -622,7 +636,7 @@ class ImageCleaner(Cleaner):
         image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw", heif_file.mode, heif_file.stride)
         try:
             for metadata in heif_file.metadata or []:
-                if 'type' in metadata and metadata['type'] == 'Exif':
+                if 'type' in metadata and metadata['type'] == 'Exif':  # pragma: no branch
                     exif_dict = piexif.load(metadata['data'])
             if exif_dict:
                 exif_bytes = piexif.dump(exif_dict)
@@ -662,7 +676,7 @@ class ImageCleaner(Cleaner):
                 try:
                     date_value, _ = str(image_date, 'utf-8').split(' ')
                     return datetime.strptime(date_value, '%Y:%m:%d')
-                except ValueError:  # pragma: no cover
+                except ValueError:
                     logger.debug('Corrupt date data %s', self.path)  # pragma: no cover
             else:
                 logger.debug('Could not find a date in %s', self.path)
@@ -700,9 +714,10 @@ class FolderCleaner(Cleaner):
         self.description: Optional[str] = self.get_description_from_path(app_name)
         self.parent: Optional[FolderCT] = parent
 
+    # Three kinds of folders, named, dated, VOID
     def __eq__(self, other):
-        # Comparison is based first on custom folder (vs just arbitrary dates)
-        if self.custom_folder and other.custom_folder:
+        # Comparison is based first on named folder (vs just dates)
+        if self.named_folder and other.named_folder:
             return True
         if self.date and other.date:
             return True
@@ -713,26 +728,22 @@ class FolderCleaner(Cleaner):
 
     def __lt__(self, other):
         if not self == other:
-            if self.custom_folder:
+            if self.named_folder:
                 return False
-            if other.custom_folder:
+            if other.named_folder:
                 return True
-            if self.date:
-                return False
             if other.date:
                 return True
         return False
 
     def __gt__(self, other):
         if not self == other:
-            if self.custom_folder:
+            if self.named_folder:
                 return True
-            if other.custom_folder:
+            if other.named_folder:
                 return False
             if self.date:
                 return True
-            if other.date:
-                return False
         return False
 
     @property
@@ -755,18 +766,17 @@ class FolderCleaner(Cleaner):
         return self.size < 10
 
     @cached_property
-    def custom_folder(self) -> bool:
+    def named_folder(self) -> bool:
         """
-        A utility to test if the folder was explicitly named (thus custom)
+        A utility to test if the folder was explicitly named
 
-        A custom folder is a folder that does not end with a date format YYYY/MM/DD and is not a folder from the root
+        A named folder is a folder that does not end with a date format YYYY/MM/DD and is not a folder from the root
         path list.
-        :return: boolean  - True if a custom folder
+        :return: boolean  - True if a named folder
 
-        .../2012/3/3/foobar is custom
-        .../foo/bar is NOT custom
-        .../2012/3/3 is NOT managed
-        .../foobar/2012/3/3 ??? should this be custom
+        .../2012/3/3/foobar is named
+        .../2012/3/3 is NOT named
+        .../foobar/2012/3/3 ??? should this be named
         """
 
         folder = str(self.path)
@@ -843,7 +853,7 @@ class FolderCleaner(Cleaner):
 
         return description if description != '' else None
 
-    def recursive_description_lookup(self, current_description: Union[Path, None], to_exclude: List[str]) -> str:
+    def recursive_description_lookup(self, current_description: Union[Path, None]) -> str:
         """
         Recurse your folders to build up path based on descriptive folder names
         ..../foo/bar/foobar/my.file
@@ -853,20 +863,10 @@ class FolderCleaner(Cleaner):
         :return: a string with the path name based on os.path.sep and the various folder levels
         """
         if self.description:
-            if self.description not in to_exclude:
-                if current_description:
-                    current_description = Path(self.description).joinpath(current_description)
-                else:
-                    current_description = Path(self.description)
+            if current_description:
+                current_description = Path(self.description).joinpath(current_description)
+            else:
+                current_description = Path(self.description)
         if self.folder:
-            current_description = self.folder.recursive_description_lookup(current_description, to_exclude)
+            current_description = self.folder.recursive_description_lookup(current_description)
         return current_description
-
-    @staticmethod
-    def reset():
-        """
-        clear the global root_path_list
-        :return:
-        """
-        while root_path_list:
-            root_path_list.pop()

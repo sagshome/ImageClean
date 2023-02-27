@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 from datetime import datetime, timedelta
+from filecmp import cmp
 from pathlib import Path
 from unittest.mock import patch
 from unittest import TestCase
@@ -24,11 +25,14 @@ from unittest import TestCase
 # pylint: disable=import-error
 from backend.cleaner import ImageCleaner, Cleaner, FolderCleaner, FileCleaner, \
     file_cleaner, duplicate_hash, root_path_list, PICTURE_FILES, MOVIE_FILES
-from Utilities.test_utilities import copy_file, create_file, set_date, \
+from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, \
     DATE_SPEC, DIR_SPEC
 
 
 class CleanerUtilsTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        Cleaner.clear_caches()
 
     def test_objects(self):
         for image_type in PICTURE_FILES:
@@ -55,12 +59,29 @@ class CleanersInitTest(TestCase):
     Test out the basic init avoided class Cleaners for setup
     """
 
+    def setUp(self):
+        super().setUp()
+        Cleaner.clear_caches()
+
     def test_null_values(self):
         # pylint: disable=protected-access
         new_obj = Cleaner(Path('/fake_parent/fake_dir/fake.file'), None)
         self.assertEqual(new_obj.path, Path('/fake_parent/fake_dir/fake.file'))
         self.assertIsNone(new_obj.folder)
         self.assertIsNone(new_obj._date)
+
+    def test_caching(self):
+        # pylint: disable=protected-access
+        new_path = Path('/somepath/foo')
+        new_path2 = Path('/somepath/bar')
+        self.assertEqual(len(Cleaner._get_root_path()), 0, 'Root Path is Empty')
+        Cleaner.add_to_root_path(new_path)
+        Cleaner.add_to_root_path(new_path2)
+        self.assertEqual(len(Cleaner._get_root_path()), 2, 'Root Path contains two paths')
+        Cleaner.add_to_root_path(new_path)
+        self.assertEqual(len(Cleaner._get_root_path()), 2, 'Root Path still contains two paths')
+        Cleaner.reset()
+        self.assertEqual(len(Cleaner._get_root_path()), 0, 'Root Path is Empty')
 
 
 class Cleaners(TestCase):
@@ -162,11 +183,13 @@ class ImageCleanerTests(Cleaners):
         super().setUp()
 
         self.small_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('small_image.jpg'), self.input_folder), None)
+            create_image_file(Path(self.temp_base.name).joinpath('small_image.jpg'), None, small=True), None)
+
         self.heic_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('heic_image.HEIC'), self.input_folder), None)
+            copy_file(self.my_location.joinpath('data').joinpath('heic_image.HEIC'), Path(self.temp_base.name)), None)
+
         self.jpg_obj = ImageCleaner(
-            copy_file(self.my_location.joinpath('data').joinpath('jpeg_image.jpg'), self.input_folder), None)
+            create_image_file(Path(self.temp_base.name).joinpath('jpeg_image.jpg'), None), None)
 
     def test_date_no_date(self):
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
@@ -218,7 +241,7 @@ class ImageCleanerTests(Cleaners):
         """
 
         # test1 -> Same File - Different paths
-        copy_obj = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base), None)
+        copy_obj = ImageCleaner(copy_file(self.jpg_obj.path, self.input_folder), None)
         self.assertTrue(copy_obj == self.jpg_obj, 'Files are the same/name and size')
 
     def test_image_compare2(self):
@@ -244,7 +267,7 @@ class ImageCleanerTests(Cleaners):
     def test_image_compare5(self):
         image_time = datetime.now()
         obj1 = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base, new_name='new_name.jpg'), None)
-        obj2 = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base), None)
+        obj2 = ImageCleaner(copy_file(self.jpg_obj.path, self.input_folder), None)
 
         # test5 -> less than and greater than
         set_date(obj1.path, image_time - timedelta(days=1))
@@ -256,7 +279,7 @@ class ImageCleanerTests(Cleaners):
     def test_image_compare6(self):
         image_time = datetime.now()
         no_date = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base, new_name='new_name.jpg'), None)
-        with_date = ImageCleaner(copy_file(self.jpg_obj.path, self.run_base), None)
+        with_date = ImageCleaner(copy_file(self.jpg_obj.path, self.input_folder), None)
 
         # test6 -> Null date values
         set_date(no_date.path, None)
@@ -332,41 +355,82 @@ class ImageCleanerTests(Cleaners):
             new_obj.de_register()
             self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to remove non-'), 'Failed to log error')
 
-    def test_relocate_1(self):
+    def test_relocate_to_nowhere(self):
         self.jpg_obj.relocate_file(None)
+        self.assertTrue(self.jpg_obj.path.exists(), 'Relocate to None does nothing')
+        self.assertFalse(self.jpg_obj.is_registered(), 'Must be specifically registered')
 
-        self.jpg_obj.relocate_file(self.output_folder, register=True)
+        self.jpg_obj.relocate_file(None, register=True)
+        self.assertFalse(self.jpg_obj.is_registered(), 'Nice try,  can not register something that does not exist')
+        self.assertTrue(self.jpg_obj.path.exists(), 'We sill exists')
+
+        self.jpg_obj.relocate_file(None, register=True, remove=True)
+        self.assertFalse(self.jpg_obj.path.exists(), 'A lot of work for a unlink')
+        self.assertFalse(self.jpg_obj.is_registered(), 'Do to None - got nothing to register')
+
+    def test_relocate_with_registration_and_remove(self):
+
+        self.assertTrue(self.jpg_obj.path.exists(), 'File Exists')
+        self.assertFalse(self.jpg_obj.is_registered(), 'Is not registered')
+        self.assertFalse(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Nothing on the output')
+
+        self.jpg_obj.relocate_file(self.output_folder)  # Default is don't register,  don't remove
         self.assertTrue(self.jpg_obj.path.exists(), 'Test no erase')
-        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists, 'Copy worked')
-        self.assertTrue(self.jpg_obj.is_registered, 'Registration worked')
-        self.jpg_obj.de_register()
-        os.unlink(self.output_folder.joinpath(self.jpg_obj.path))
+        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Relocate worked')
+        self.assertFalse(self.jpg_obj.is_registered(), 'Registration did not happen')
 
-    def test_relocate_2(self):
-        self.jpg_obj.relocate_file(self.output_folder, remove=True)
-        self.assertFalse(self.jpg_obj.path.exists(), 'Test erase')
-        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists, 'Copy worked')
-        copy_file(self.output_folder.joinpath(self.jpg_obj.path.name), self.input_folder)
+        os.unlink(self.output_folder.joinpath(self.jpg_obj.path.name))
+        original_path = self.jpg_obj.path
+        self.jpg_obj.relocate_file(self.output_folder, register=True,  remove=True)  # Default is don't register,  don't remove
+        self.assertFalse(original_path.exists(), 'Test erase')
+        self.assertEqual(self.output_folder.joinpath(self.jpg_obj.path.name), self.jpg_obj.path, 'Path updated')
+        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Relocate worked')
+        self.assertTrue(self.jpg_obj.is_registered(), 'Registration happen')
+
+    def test_relocate_with_rollover(self):
+        basic_name = f'{self.jpg_obj.path.stem}*{self.jpg_obj.path.suffix}'
+        new_obj = ImageCleaner(copy_file(self.small_obj.path, self.input_folder, new_name=self.jpg_obj.path.name), None)
+
+        self.assertEqual(count_files(self.output_folder, basic_name), 0, 'No relocations')
+        self.assertEqual(self.jpg_obj.path.name, new_obj.path.name, 'Two files - same name')
+        self.assertFalse(cmp(self.jpg_obj.path, new_obj.path), 'File Not the same')
+
+        self.jpg_obj.relocate_file(self.output_folder)
+        self.assertEqual(count_files(self.output_folder, basic_name), 1, 'Moved once')
+        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Copy Worked')
+        self.assertTrue(cmp(self.output_folder.joinpath(self.jpg_obj.path.name), self.jpg_obj.path), 'File is the same')
 
         self.jpg_obj.relocate_file(self.output_folder, rollover=False)
+        self.assertEqual(count_files(self.output_folder, basic_name), 1, 'Moved Twice')
+        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Copy Worked')
+        self.assertTrue(cmp(self.output_folder.joinpath(self.jpg_obj.path.name), self.jpg_obj.path), 'File is the same')
 
-        self.assertFalse(self.output_folder.joinpath(f'{self.jpg_obj.path.name}_0').exists(), 'Rollover test')
-        self.jpg_obj.relocate_file(self.output_folder)
-        self.assertTrue(self.jpg_obj.path.exists(), 'Rollover worked')
+        new_obj.relocate_file(self.output_folder, rollover=True)
+        self.assertEqual(count_files(self.output_folder, basic_name), 2, 'Moved Twice')
+        self.assertTrue(self.output_folder.joinpath(self.jpg_obj.path.name).exists(), 'Copy Worked')
+        self.assertTrue(self.output_folder.joinpath(f'{self.jpg_obj.path.stem}_0{self.jpg_obj.path.suffix}').exists(),
+                        'Rollover Worked')
+        self.assertTrue(cmp(self.output_folder.joinpath(self.jpg_obj.path.name), new_obj.path), 'File is the same')
+        self.assertTrue(cmp(self.output_folder.joinpath(f'{self.jpg_obj.path.stem}_0{self.jpg_obj.path.suffix}'),
+                            self.jpg_obj.path), 'File is the same')
 
-        self.jpg_obj.relocate_file(self.output_folder)
-        self.assertTrue(self.jpg_obj.path.exists(), 'Rollover worked again')
+    def test_relocate_with_permission_errors(self):
 
-        new_dir = self.output_folder.joinpath('NewDirectory')
-        self.jpg_obj.relocate_file(new_dir)
-        self.assertTrue(new_dir.joinpath(self.jpg_obj.path.name), 'Directory was created')
-
-        if platform.system() not in ['Windows', 'win32']:  # chmod does not work in windows
+        if platform.system() not in ['Windows', 'win32']:  # pragma: no cover
+            # chmod does not work in windows
+            new_dir = Path(self.temp_base.name).joinpath('ReadOnly')
+            os.makedirs(new_dir)
+            new_obj = ImageCleaner(create_image_file(new_dir.joinpath('err_image.jpg'), None), None)
             os.chmod(new_dir, 0o500)  # Owner +r+x
-            new_image = ImageCleaner(new_dir.joinpath(self.jpg_obj.path.name), None)
+
             with self.assertLogs('Cleaner', level='DEBUG') as logs:
-                new_image.relocate_file(self.output_folder, rollover=True, remove=True)
-                error_value = f'DEBUG:Cleaner:{new_image.path}'
+                error_value = f'DEBUG:Cleaner:{new_obj.path} could not be removed'
+                new_obj.relocate_file(self.output_folder, remove=True)
+                self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value))
+
+            with self.assertLogs('Cleaner', level='ERROR') as logs:
+                self.jpg_obj.relocate_file(new_dir)
+                error_value = f'ERROR:Cleaner:Can not write to {new_dir}'
                 self.assertTrue(logs.output[len(logs.output) - 1].startswith(error_value), 'R/O remove')
 
     def test_get_data_from_path_name(self):
@@ -444,18 +508,20 @@ class ImageCleanerTests(Cleaners):
         self.assertEqual(self.jpg_obj, self.jpg_obj.convert(self.run_base, None))
 
     def test_convert_defaults(self):
-        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
+        if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
 
-            new_obj = self.heic_obj.convert(self.run_base, self.migration_base)  # Default  remove=True
+            with self.assertLogs('Cleaner', level='DEBUG') as logs:
+                new_obj = self.heic_obj.convert(self.run_base, self.migration_base)  # Default  remove=True
+                self.assertTrue(logs.output[len(logs.output) - 1].startswith('DEBUG:Cleaner:Will not copy to myself'))
 
             self.assertNotEqual(self.heic_obj, new_obj)
             self.assertEqual(self.heic_obj.path.stem, new_obj.path.stem)
             self.assertEqual(new_obj.path.suffix, '.jpg')
             self.assertTrue(new_obj.path.exists())
-            self.assertFalse(self.heic_obj.path.exists())
+            self.assertTrue(self.heic_obj.path.exists())
 
     def test_convert_no_migrate_inplace(self):
-        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
+        if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
 
             new_obj = self.heic_obj.convert(self.run_base, None, remove=True)  # Default  remove=True
 
@@ -466,7 +532,7 @@ class ImageCleanerTests(Cleaners):
             self.assertFalse(self.heic_obj.path.exists())
 
     def test_convert_exists(self):
-        if platform.system() not in ['win32', 'Windows']:  # Convert tested in Unix only
+        if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
             new_obj = self.heic_obj.convert(self.run_base, None, remove=False)
             self.assertTrue(new_obj.path.exists())
             self.assertTrue(self.heic_obj.path.exists())
@@ -652,11 +718,16 @@ class FolderTests(Cleaners):
             child = FolderCleaner(self.custom_dir1.path.joinpath(folder), parent=self.custom_dir1)
             if description:
                 self.assertEqual(child.description, description)
+                self.assertTrue(child.named_folder)
             else:
                 self.assertIsNone(child.description, f'Processing - {folder} with {description}')
+                self.assertFalse(child.named_folder)
 
         base = FolderCleaner(self.custom_dir1.path.joinpath('funky_app_something'), parent=None, app_name='funky_app')
         self.assertIsNone(base.description)
+
+    def test_recursive_lookup(self):
+        pass
 
     def test_reset(self):
         self.assertEqual(len(root_path_list), 2, 'Default input / output')
@@ -664,11 +735,101 @@ class FolderTests(Cleaners):
         self.assertEqual(len(root_path_list), 0, 'Reset Successful')
 
     def test_add_root(self):
+
         self.assertEqual(len(root_path_list), 2, 'Default input / output')
         Cleaner.add_to_root_path(Path('/tmp/foo'))
         self.assertEqual(len(root_path_list), 3, '+ foo')
         Cleaner.add_to_root_path(Path('/tmp/foo'))
         self.assertEqual(len(root_path_list), 3, 'too much foo')
+
+
+class ImageConversionTests(Cleaners):
+    def setUp(self):
+        super().setUp()
+        self.filepath = self.input_folder.joinpath('a.heic')
+        self.file = ImageCleaner(create_file(self.filepath, data='File Contents1'), None)
+
+    def test_only_heic(self):
+        fake_jpeg = ImageCleaner(create_file(self.input_folder.joinpath('a.jpeg')), None)
+        new = fake_jpeg.convert(self.input_folder, migrated_base=None, remove=True)
+        self.assertEqual(fake_jpeg, new, 'No changes on JPEG file')
+
+    @patch('platform.system')
+    def test_never_on_windows(self, platform_system):
+        platform_system.return_value = 'Windows'
+        with self.assertLogs('Cleaner', level='ERROR') as logs:
+            new = self.file.convert(self.input_folder, migrated_base=None, remove=True)
+            self.assertEqual(logs.output[0], 'ERROR:Cleaner:Conversion from HEIC is not supported on Windows')
+        self.assertIn(self.filepath.suffix.upper(), self.file.CONVERSION_SUFFIX, 'Conversion Suffix is correct')
+        self.assertEqual(self.file, new, 'No changes on Windows file')
+
+
+class ImageProcessingTests(Cleaners):
+    """
+    monkeyPatch the heck out of image processing.
+
+    Using this as piexif constants seem to mess around with mock
+
+    piexif.ExifIFD.DateTimeOriginal -> 36867
+    piexif.ExifIFD.DateTimeDigitized -> 36868
+    piexif.ImageIFD.DateTime -> 306
+    """
+    def setUp(self):
+        super().setUp()
+        self.orig = 36867
+        self.digitized = 36868
+        self.image_ifd = 306
+        self.filepath = self.input_folder.joinpath('a.file')
+        self.file = ImageCleaner(create_file(self.filepath, data='File Contents1'), None)
+
+        self.data = {
+            'Exif': {
+                self.orig: bytes(DATE_SPEC.strftime('%Y:%m:%d 00:00:00'), 'utf-8'),
+                self.digitized:  bytes((DATE_SPEC+timedelta(days=1)).strftime('%Y:%m:%d 00:00:00'), 'utf-8')
+            },
+            '0th': {
+                self.image_ifd: bytes((DATE_SPEC+timedelta(days=2)).strftime('%Y:%m:%d 00:00:00'), 'utf-8')
+            }
+        }
+
+    @patch('piexif.load')
+    def test_no_date(self, piexif):
+        piexif.return_value = {}
+        self.assertIsNone(self.file.get_date_from_image(), 'Image has no date')
+
+    @patch('piexif.load')
+    def test_orig_date(self, piexif):
+        piexif.return_value = self.data
+        self.assertEqual(DATE_SPEC, self.file.get_date_from_image())
+
+    @patch('piexif.load')
+    def test_orig_ifd_date(self, piexif):
+        del self.data['Exif'][self.orig]
+        del self.data['Exif'][self.digitized]
+        piexif.return_value = self.data
+        self.assertEqual(DATE_SPEC+timedelta(days=2), self.file.get_date_from_image())
+
+    @patch('piexif.load')
+    def test_orig_digitized_date(self, piexif):
+        del self.data['Exif'][self.orig]
+        piexif.return_value = self.data
+        self.assertEqual(DATE_SPEC+timedelta(days=1), self.file.get_date_from_image())
+
+    @patch('piexif.load')
+    def test_no_date_data(self, piexif):
+        self.data['Exif'][self.orig] = None
+        piexif.return_value = self.data
+        with self.assertLogs('Cleaner', level='DEBUG') as logs:
+            self.file.get_date_from_image()
+            self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Could not find a date in {self.filepath}')
+
+    @patch('piexif.load')
+    def test_bad_date_data(self, piexif):
+        self.data['Exif'][self.orig] = bytes('foo bar', 'utf-8')
+        piexif.return_value = self.data
+        with self.assertLogs('Cleaner', level='DEBUG') as logs:
+            self.file.get_date_from_image()
+            self.assertEqual(logs.output[0], f'DEBUG:Cleaner:Corrupt date data {self.filepath}')
 
 
 if __name__ == '__main__':  # pragma: no cover

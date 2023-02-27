@@ -2,7 +2,7 @@
 Just some things to make testing easier
 """
 from datetime import datetime
-from os import makedirs, walk
+from os import makedirs
 from pathlib import Path
 from shutil import copyfile
 from typing import Union
@@ -33,15 +33,17 @@ def copy_file(in_file: Path, out_path: Path, new_name: str = None) -> Path:
     return new_path
 
 
-def count_files(path: Path):
+def count_files(path: Path, filename: Union[str, None] = None, ):
     """
 
     :param path:
+    :param filename (can be globed as in foo* or fo*bar)
     :return:
     """
+    globber = filename if filename else '*'
     count = 0
-    for _, _, files_list in walk(path):
-        for _ in files_list:
+    for entry in path.rglob(globber):
+        if entry.is_file():
             count += 1
     return count
 

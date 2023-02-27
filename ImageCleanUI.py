@@ -14,7 +14,12 @@ from datetime import datetime
 
 os.environ["KIVY_NO_CONSOLELOG"] = "1"
 
+
 # pylint: disable=wrong-import-position, missing-function-docstring
+
+from kivy.config import Config
+Config.set('graphics', 'resizable', False)
+
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -23,6 +28,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.properties import ObjectProperty, StringProperty, BooleanProperty, NumericProperty
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
+from kivy.core.window import Window
 
 sys.path.append('.')
 from backend.cleaner import FileCleaner, FolderCleaner  # pylint: disable=import-error
@@ -32,6 +38,7 @@ if platform.system() == 'Windows':
     import win32timezone
 
 application_name = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
+Window.size = (1000, 600)
 
 app_path = Path(sys.argv[0])
 run_path = Path(Path.home().joinpath(f'.{application_name}'))
@@ -43,12 +50,12 @@ results_file = run_path.joinpath(f'{application_name}.results')
 
 if results_file.exists():
     results_file.unlink()
-    FileCleaner.rollover_name(results_file)
+    FileCleaner.rollover_file(results_file)
 
 RESULTS = open(results_file, "w+")  # pylint: disable=consider-using-with
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
-    FileCleaner.rollover_name(log_file)
+    FileCleaner.rollover_file(log_file)
 
 debugging = os.getenv(f'{application_name.upper()}_DEBUG')
 logger = logging.getLogger(application_name)
@@ -104,7 +111,6 @@ def calculate_size(path, which):
             for _ in files:
                 value += 1
     which.value = value
-    print(f'{datetime.now()} {path}: {which.value}')
 
 
 async def a_calculate_size(path: Path, which: Value):
@@ -159,6 +165,20 @@ def dismiss_dialog(title, text):
     _popup.open()
 
 
+def remove_widget_by_class(parent: Widget, class_name: str):
+    """
+    Can not re-add a widget using an ID,  so this is used to remove base on class name.
+    :param parent:  Parent Widget
+    :param class_name:  String for the class name
+    :return:
+    """
+    for child in parent.children:
+        if child.__class__.__name__ == class_name:
+            parent.remove_widget(child)
+            break
+    return
+
+
 class DismissDialog(BoxLayout):
 
     error_text = StringProperty()
@@ -184,8 +204,42 @@ class CheckBoxItem(BoxLayout):
     @staticmethod
     def set_keep_originals(touch):
         cleaner_app.keep_original_files = touch
-        logger.debug(f'keep_originals is {touch}')
 
+    @staticmethod
+    def value_keep_originals():
+        return cleaner_app.keep_original_files
+    @staticmethod
+    def set_process_duplicates(touch):
+        cleaner_app.check_for_duplicates = touch
+
+    @staticmethod
+    def value_process_duplicates():
+        return cleaner_app.check_for_duplicates
+    @staticmethod
+    def set_process_small(touch):
+        cleaner_app.check_for_small = touch
+
+    @staticmethod
+    def value_process_small():
+        return cleaner_app.check_for_small
+
+    @staticmethod
+    def set_do_convert(touch):
+        cleaner_app.do_convert = touch
+
+    @staticmethod
+    def value_do_convert():
+        return cleaner_app.do_convert
+
+    @staticmethod
+    def set_check_folders(touch):
+        cleaner_app.check_for_folders = touch
+
+    @staticmethod
+    def value_set_folders():
+        return cleaner_app.check_for_folders
+class Options(BoxLayout):
+    pass
 
 class RadioBoxItem(BoxLayout):
     """
@@ -225,19 +279,39 @@ class EnterFolder(TextInput):
     pass
 
 
-class ActionBox(BoxLayout):
+class ButtonBox(FloatLayout):
+    pass
+
+
+class ActionBox(FloatLayout):
 
     def start_processing(self):
         cleaner_app.save_config()
-        self.parent.ids['Progress'].start_application()
-        self.parent.remove_widget(self.parent.ids['ActionBox'])
+        progress = Progress()
+        self.parent.add_widget(progress)
+        self.parent.add_widget(ButtonBox())
+        progress.start_application()
+
+        remove_widget_by_class(self.parent, 'Options')
+        remove_widget_by_class(self.parent, 'ActionBox')
+        pass
 
 
-class Progress(Widget):
+class ExitBox(FloatLayout):
+
+    def restart(self):
+
+        root = self.parent
+        remove_widget_by_class(root, 'Progress')
+        remove_widget_by_class(root, 'ExitBox')
+        root.add_widget(Options())
+        root.add_widget(ActionBox())
+
+
+class Progress(BoxLayout):
     progress_bar = ObjectProperty(None)
     progress_summary = ObjectProperty(None)
     progress_text = ObjectProperty(None)
-    exit_button = ObjectProperty(None)
     bg_process = None
     max_results_size = 5000
     task = None
@@ -269,7 +343,6 @@ class Progress(Widget):
             if self.task.exception():
                 logger.error(self.task.exception())
             self.updates.cancel()
-            self.exit_button.text = 'Exit'  # Change label from Abort to Exit
             calculate_size(cleaner_app.output_folder, mp_output_count)
             self.progress_text.text += f"Summary:\n\nInput Folder: {cleaner_app.input_folder} " \
                                        f"Input File Count: {mp_input_count.value}\n" \
@@ -277,14 +350,17 @@ class Progress(Widget):
                                        f"Output File Count: {mp_output_count.value}"
 
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
+            self.parent.remove_widget(self.parent.children[0])
+            self.parent.add_widget(ExitBox())
+
 
     def start_application(self):
 
-        calculate_size(cleaner_app.input_folder, mp_input_count)
-        calculate_size(cleaner_app.output_folder, mp_output_count)
-
         cleaner_app.print = types.MethodType(self.override_print, cleaner_app)
         cleaner_app.increment_progress = types.MethodType(self.override_progress, cleaner_app)
+
+        calculate_size(cleaner_app.input_folder, mp_input_count)
+        calculate_size(cleaner_app.output_folder, mp_output_count)
 
         self.progress_bar.max = mp_input_count.value
         self.progress_text.text = "Results:\n\n"
@@ -389,6 +465,8 @@ class FolderSelector(BoxLayout):
         self._popup2.dismiss()
 
     def change_drives(self):
+        if not platform.system() == 'Windows':
+            return
         self.content = BoxLayout(orientation='vertical')
         base = Path(self.input_label_value).parts[0]
         for drive in self.drives:
@@ -429,33 +507,34 @@ class FolderSelector(BoxLayout):
         asyncio.get_event_loop().create_task(a_calculate_size(cleaner_app.output_folder, mp_output_count))
 
 
-class Main(BoxLayout):
+class Main(FloatLayout):
     # input_selector = ObjectProperty(None)
 
     input_task = ObjectProperty()
     output_task = ObjectProperty()
 
     # def __init__(self, **kwargs):
-    #     super(Main, self).__init__(**kwargs)
+    #    super(Main, self).__init__(**kwargs)
+    #     pass
 
     @staticmethod
     def help():
-        print('foobar')
-        dismiss_dialog('Help',
-                       "ImageClean: Organize images based on dates and custom folder names.  The date format is:\n"
-                       "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
-                       "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n"
-                       "       This structure should help you find your pictures much easier\n\n"
-                       "Input Folder is where the images will be loaded from\n"
-                       "Output Folder is where they will be stored - it can be the same as Input Folder\n\n"
-                       "Options\n"
-                       "Recreate: The output folder will be replaced \n"
-                       "Keep options - files that would normally be erased after they are relocated, "
-                       "Paranoid sets these.\n"
-                       "Add a folder to Ignore - This allows you to skip sub-folders of the Input Folder\n"
-                       "Add a folder NAME to Ignore - This is used to prevent custom names from being used,  "
-                       "the images\nare still processed, but with the example above 'Florida', would not be used as a"
-                       "custom folder name\n"
+        dismiss_dialog(
+            'Help',
+           "Photo Manager: Organize images based on dates and custom folder names.  The date format is:\n"
+           "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
+           "    Times are based off 1) internal image time,  2) a existing directory with date values.\n"
+           "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n\n"
+           "This structure should help you find your images much easier\n\n"
+           "'Import Images From' is where the images will be loaded from\n"
+           "'Save Images To' is where they will be stored - it can be the same as the From folder\n\n"
+           "Options\n"
+           "Keep Originals      - If selected no changes to Import From,  usually files are copied and deleted. \n"
+           "Look for Duplicates - Files with similar names, but in different folders are checked and if\n "
+           "they are the same,  the copy is moved to duplicates folder. On large output folders this can take a while.\n"
+           "Look for Thumbnails - Isolate images that are very small (Often created by other importing software)\n"
+           "Convert HEIC files  - Look for this format and if found convert to JPEG (HIEC are only display on Apple devices\n"
+           "Preserve Folders    - On Image Import, check for descriptive folders. If not selected all files are store by date only\n"
                        )
 
     @staticmethod

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from image_cleaner import main, APP
+from image_cleaner import main
 
 
 class ActualScenarioTest(unittest.TestCase):
@@ -61,9 +61,9 @@ class ActualScenarioTest(unittest.TestCase):
     def test_input(self, home):
         home.return_value = Path(self.temp_base.name)
 
-        main(["program_name", str(self.input_folder)])
-        self.assertEqual(APP.input_folder, self.input_folder)
-        self.assertEqual(APP.output_folder, self.input_folder)
+        my_app = main(["program_name", str(self.input_folder)])
+        self.assertEqual(my_app.input_folder, Path(self.input_folder))
+        self.assertEqual(my_app.output_folder, Path(self.input_folder))
 
     @patch('pathlib.Path.home')
     def test_bad_input(self, home):
@@ -76,13 +76,26 @@ class ActualScenarioTest(unittest.TestCase):
     def test_options(self, home):
         home.return_value = Path(self.temp_base.name)
 
-        main(["program_name", f"-crsvi{str(self.input_folder)}", str(self.output_folder)])
-        self.assertEqual(APP.input_folder, self.input_folder)
-        self.assertEqual(APP.output_folder, self.output_folder)
-        self.assertTrue(APP.do_convert)
-        self.assertFalse(APP.keep_original_files)
-        self.assertTrue(APP.process_small_files)
-        self.assertTrue(APP.verbose)
+        my_app = main(["program_name", f"-crsdvi{str(self.input_folder)}", str(self.output_folder)])
+        self.assertEqual(my_app.input_folder, Path(self.input_folder))
+        self.assertEqual(my_app.output_folder, Path(self.output_folder))
+        self.assertTrue(my_app.do_convert)
+        self.assertFalse(my_app.keep_original_files)
+        self.assertTrue(my_app.check_for_small)
+        self.assertTrue(my_app.verbose)
+        self.assertTrue(my_app.check_for_duplicates)
+
+    @patch('pathlib.Path.home')
+    def test_no_options(self, home):
+        home.return_value = Path(self.temp_base.name)
+
+        my_app = main(["program_name", str(self.output_folder)])
+        self.assertEqual(my_app.input_folder, Path(self.output_folder))
+        self.assertEqual(my_app.output_folder, Path(self.output_folder))
+        self.assertFalse(my_app.do_convert)
+        self.assertTrue(my_app.keep_original_files)
+        self.assertFalse(my_app.check_for_small)
+        self.assertFalse(my_app.verbose)
 
     @patch('builtins.print')
     @patch('pathlib.Path.home')

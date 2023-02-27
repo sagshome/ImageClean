@@ -21,31 +21,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-sys.path.append('.')
+sys.path.append('.')  # required to satisfy imports of backend
 from backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position import-error
 from backend.image_clean import ImageClean  # pylint: disable=wrong-import-position import-error
 
 
-APP_PATH = Path(sys.argv[0])
-APP_NAME = APP_PATH.name[:len(APP_PATH.name) - len(APP_PATH.suffix)]
+APP_PATH: Path = Path(sys.argv[0])
+APP_NAME: str = APP_PATH.stem
 
-LOGGER_NAME = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff app names
-APP = ImageClean(LOGGER_NAME)  # Sets all default values
+LOGGER_NAME: str = 'Cleaner'  # I am hard-coding this value. I call it from cmdline and UI which have diff app names
+#  APP = ImageClean(LOGGER_NAME)  # Sets all default values
 
-APP_HELP = f'{APP_NAME} -hcrsv -i <import_folder> image_folder\n' \
-           '\n\n-h: This help' \
-           '\nThis application will reorganize image files into a folder structure that is human friendly' \
-           '\nGo to https://github.com/sagshome/ImageClean/wiki for details' \
-           f'\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the "{APP.migrated_path_base}" folder' \
-           '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed'\
-           f'\n-s: Check for small files (save in "{APP.small_base}" folder) - This WILL slow down processing' \
-           '\n-v: Verbose,  blather on to the terminal' \
-           '\n-i import folder - where we are importing from (default is just process image_folder)' \
-           '\n\nimage folder - where to image files are saved'
 
 log_file = Path.home().joinpath(f'{LOGGER_NAME}.log')  # pylint: disable=invalid-name
 if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
-    FileCleaner.rollover_name(log_file)
+    FileCleaner.rollover_file(log_file)
 
 logger = logging.getLogger(LOGGER_NAME)  # pylint: disable=invalid-name
 
@@ -64,56 +54,93 @@ else:
     logger.setLevel(level=logging.ERROR)
 
 
-async def run():  # pragma: no cover
+def short_help() -> str:
+    """
+    Build short help
+    :return:
+    """
+    return f'{APP_NAME} -hcrdsv -i <import_folder> image_folder\n' \
+           '\n\n-h: This help' \
+           '\nThis application will reorganize image files into a folder structure that is human friendly' \
+           '\nGo to https://github.com/sagshome/ImageClean/wiki for details'
+
+
+def app_help(app: ImageClean) -> str:  # pragma: no cover
+    """
+    Build help text
+    :param app:
+    :return:
+    """
+    return f'{short_help()}' \
+           '\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the' \
+           f'"{app.migrated_path_base}" folder' \
+           '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed' \
+           '\n-d: Process Duplicates. look for and exact files in duplicate directories - and pick the best' \
+           f'\n-s: Check for small files (save in "{app.small_base}" folder) - This WILL slow down processing' \
+           '\n-v: Verbose,  blather on to the terminal' \
+           '\n-i import folder - where we are importing from (default is just process image_folder)' \
+           '\n\nimage folder - where to image files are saved'
+
+
+async def run(app):  # pragma: no cover
     """
     This is needed to support async requirement of APP.run()
     :return:
     """
-    await APP.run()
+    await app.run()
 
 
-def main(arg_strings=None):
+def main(arg_strings=None) -> ImageClean:
     """
     Main program
     :param arg_strings: sys.argv
     :return: None
     """
     try:
-        opts, args = getopt.getopt(arg_strings[1:], 'hcrsvi:', [])
+        opts, args = getopt.getopt(arg_strings[1:], 'hcrsdvi:', [])
     except getopt.GetoptError:
         print(f'Invalid syntax: {sys.argv[1:]}\n\n')
-        print(APP_HELP)
+        print(short_help())
         sys.exit(4)
 
     if len(args) != 1:
         print('\nimage folder is required.\n\n')
-        print(APP_HELP)
+        print(short_help())
         sys.exit(2)
-    else:
-        APP.output_folder = Path(args[0])
 
-    input_folder = None
-    for opt, arg in opts:
+    options = {'output': Path(args[0]),
+               'do_convert': False,
+               'keep_originals': True,
+               'verbose': False,
+               'check_small': False,
+               'check_duplicates': False}
+
+    for opt, arg in opts:  # pragma: no cover
         if opt == '-h':
-            print(APP_HELP)
+            print(app_help)
             sys.exit(2)
         elif opt == '-c':
-            APP.convert_files = True
+            options['do_convert'] = True
         elif opt == '-r':
-            APP.keep_original_files = False
+            options['keep_originals'] = False
         elif opt == '-s':
-            APP.process_small_files = True
+            options['check_small'] = True
+        elif opt == '-d':
+            options['check_duplicates'] = True
         elif opt == '-v':
-            APP.verbose = True
+            options['verbose'] = True
         elif opt == '-i':
             try:
                 os.stat(arg)
             except FileNotFoundError:
-                print(f'Import Folder: {arg} is not found.   Critical error \n\n {APP_HELP}')
+                print(f'Import Folder: {arg} is not found.   Critical error \n\n {short_help()}')
                 sys.exit(3)
-            input_folder = Path(arg)
+            options['input'] = Path(arg)
 
-    APP.input_folder = APP.output_folder if not input_folder else input_folder
+    if 'input' not in options:
+        options['input'] = options['output']
+
+    return ImageClean(APP_NAME, restore=False, **options)
 
 
 if __name__ == '__main__':  # pragma: no cover
@@ -121,10 +148,10 @@ if __name__ == '__main__':  # pragma: no cover
 
     logger.debug('Starting (%s - %s)', datetime.now(), start_time)
 
-    main(sys.argv)
+    the_app = main(sys.argv)
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(run())
+    loop.run_until_complete(run(the_app))
     loop.close()
 
     logger.debug('Completed (%s - %s)', datetime.now(), start_time)
