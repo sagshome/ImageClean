@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 DATE_SPEC = datetime(1961, 9, 27)
 DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
+YEAR_SPEC = Path(str(DATE_SPEC.year))
 DEFAULT_NAME = 'file.jpg'
 
 

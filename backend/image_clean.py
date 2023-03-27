@@ -7,16 +7,17 @@ import asyncio
 import logging
 import os
 import pickle
+import re
 import sys
 import tempfile
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Dict, List, TypeVar
 
 sys.path.append('.')
 # pylint: disable=import-error wrong-import-position
-from backend.cleaner import Cleaner, ImageCleaner, FileCleaner, FolderCleaner, file_cleaner, PICTURE_FILES, MOVIE_FILES
+from backend.cleaner import CleanerBase, ImageCleaner, FileCleaner, FolderData, make_cleaner_object, PICTURE_FILES, MOVIE_FILES
 
 logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
 
@@ -31,6 +32,13 @@ GREATER: int = 1
 LESSER: int = 2
 
 WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 members is a Yellow flag
+MAXIMUM_FOLDER_SIZE = 50  # Date based folder,  more than MAX,  create a child
+"""
+When we store files by date,  just use the YEAR 2020 to store all files,  unless... we have more then REQUIRE_SUBFOLDERS
+then add a subfolder with MONTH,  if the MONTH as more then REQUIRE_SBUFOLDERS,  add a day
+"""
+
+DF = TypeVar("DF", bound="Folder")  # pylint: disable=invalid-name
 
 
 class ImageClean:  # pylint: disable=too-many-instance-attributes
@@ -41,12 +49,11 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.app_name = app
         self.run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
         if not self.run_path.exists():
-            os.makedirs(self.run_path, mode=511, exist_ok=True)
+            os.makedirs(self.run_path, mode=511)
         self.conf_file = self.run_path.joinpath('config.pickle')
 
         # Default option/values
-        self.input_folder = Path.home()
-        self.output_folder = Path.home()
+        self.input_folder = self.output_folder = Path.home()
         self.verbose = False
         self.do_convert = True
         self.force_keep = False  # With R/O directories we can not ever try and remove anything
@@ -54,7 +61,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.check_for_small = False
         self.check_for_duplicates = False
         self.check_for_folders = True  # When set,  check for descriptive folder names, else just use dates.
-        self.ignore_folders = []
         self.progress = 0
 
         if restore:  # Used by UI
@@ -73,13 +79,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.no_date_base = f'{self.app_name}_NoDate'
         self.small_base = f'{self.app_name}_Small'
 
-        self.in_place = False
-        self.no_date_path = None
-        self.small_path = None
-        self.migrated_path = None
-        self.duplicate_path = None
-        self.image_movies_path = None
-
+        self.folders: Dict[str, DF] = {}  # This is used to store output folders - one to one map to folder object
         self.movie_list = []  # We need to track these so we can clean up
         self.working_folder = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
 
@@ -147,53 +147,31 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         self.progress += 1
 
-    def setUp(self):  # pylint: disable=invalid-name
+    def setup(self):  # pylint: disable=invalid-name
         """
         For the GUI,  we need a way to 'prepare' the environment
         :return:
         """
-        # pylint: disable=too-many-branches
         self.print(f'Preparing the environment: Input: {self.input_folder} Output: {self.output_folder}')
-        if not self.output_folder.exists():
-            os.mkdir(self.output_folder)
+
 
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
-            self.force_keep = True  # pragma: win
+            self.force_keep = True
 
-        if self.output_folder == self.input_folder:
-            self.in_place = True
-
-        self.no_date_path = self.output_folder.joinpath(self.no_date_base)
-        self.small_path = self.output_folder.joinpath(self.small_base)
-        self.migrated_path = self.output_folder.joinpath(self.migrated_path_base)
-        self.duplicate_path = self.output_folder.joinpath(self.duplicate_path_base)
-        self.image_movies_path = self.output_folder.joinpath(self.image_movies_path_base)
-
-        # Make sure we ignore these,  they came from us.
-        self.ignore_folders.append(self.small_path)
-        self.ignore_folders.append(self.migrated_path)
-        self.ignore_folders.append(self.duplicate_path)
-        self.ignore_folders.append(self.image_movies_path)
-
-        if not self.no_date_path.exists():
-            os.mkdir(self.no_date_path)
-        if not self.migrated_path.exists():
-            os.mkdir(self.migrated_path)
-        if not self.duplicate_path.exists():
-            os.mkdir(self.duplicate_path)
-        if not self.image_movies_path.exists():
-            os.mkdir(self.image_movies_path)
-        if not self.small_path.exists():
-            os.mkdir(self.small_path)
-
-        Cleaner.add_to_root_path(self.no_date_path)
+        base = FolderData(self.output_folder, internal=True)
+        FolderData(self.output_folder.joinpath(self.no_date_base), internal=True)
+        FolderData(self.output_folder.joinpath(self.small_base), internal=True)
+        FolderData(self.output_folder.joinpath(self.migrated_path_base), internal=True)
+        FolderData(self.output_folder.joinpath(self.duplicate_path_base), internal=True)
+        FolderData(self.output_folder.joinpath(self.image_movies_path_base), internal=True)
 
         logger.debug('Registration is Starting')
+        base.populate_folders()
         self._register_files(self.output_folder)
         logger.debug('Registration is completed')
 
-    def tearDown(self):  # pylint: disable=invalid-name
+    def teardown(self):  # pylint: disable=invalid-name
         """
         Only logically way when you have prepared and run
         :return:
@@ -208,41 +186,35 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
 
         self.print('Registering existing images.')
-        self.setUp()
+        self.setup()
         # Start it up.
-        master = FolderCleaner(self.input_folder,
-                               parent=None,
-                               root_folder=self.input_folder,
-                               output_folder=self.output_folder)
-        master.description = None  # We need to do this to ensure that this folder name is not used a description
         self.print('Starting Imports.')
-        await self.process_folder(master)
+        await self.process_folder(self.input_folder)
         if self.check_for_duplicates:
             await self._process_duplicate_files()
-        self.tearDown()
+        self.teardown()
 
         # Clean up
-        master.reset()
         self._process_duplicates_movies()
+        self._balance_folders(self.output_folder, MAXIMUM_FOLDER_SIZE)
         self.print('Auditing folders.')
         self._audit_folders(self.output_folder)
         if self.output_folder != self.input_folder and not self.keep_original_files:
             self._audit_folders(self.input_folder)
 
-    def _register_files(self, output_dir: Path):
+    def _register_files(self, folder: Path):
         """
-        Take an inventory of all the existing files. This allows us to easily detected duplicate files.
-        param output_dir where we will be moving file to
+        Take an inventory of all the existing files/folders.  This allows us to easily detected duplicate files.
         :return:
         """
-        for entry in output_dir.iterdir():
+        for entry in folder.iterdir():
             if entry.is_dir():
                 try:
                     self._register_files(entry)
-                except PermissionError:  # pragma: no cover
-                    pass  # This can happen,  just ignore it
+                except PermissionError:
+                    self.print(f'Warning output folder {entry} is not accessible')
             else:
-                file_cleaner(entry, FolderCleaner(output_dir, app_name=self.app_name)).register(deep=False)
+                make_cleaner_object(entry).register()
 
     def _folder_test(self, folder1, folder2) -> int:
         """
@@ -283,16 +255,16 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         :return:
         """
-        # pylint: disable=too-many-nested-blocks
         self.print('Processing any duplicate files.')
-        entries = deepcopy(Cleaner.get_hash())  # This deepcopy is very slow!
+        entries = deepcopy(CleanerBase.get_hash())  # This deepcopy is very slow!
         for entry in entries:
             if len(entries[entry]) > 1:
+
                 for outer in range(len(entries[entry])):
                     this = entries[entry][outer]
                     if this:
-                        print(f'Potential Duplicate with Key {entry}')
-                        if str(this.path).startswith(str(self.duplicate_path)):  # pragma: no cover
+                        # print(f'Potential Duplicate with Key {entry}')
+                        if str(this.path).startswith(str(self.output_foler.joinpath(self.duplicate_path_base))):
                             continue  # This is already flagged as a duplicate
                         new_path = self.get_new_path(this)
                         if this.path.parent == new_path:  # I am still in the right place
@@ -312,7 +284,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                                         break
                         else:  # I am not in the right place.
                             if new_path.joinpath(this.path.name).exists():
-                                new_path = self.get_new_path(this, is_duplicate=True, preserve=True)
+                                new_path = self.get_new_path(this, is_duplicate=True)
                             this.relocate_file(new_path, remove=self.remove_file(this))
         self.print('Duplicate processing completed')
 
@@ -326,11 +298,32 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         self.print('Processing any movie clips.')
         for entry in self.movie_list:
-            for item in entry.get_all_registered():
+            for item in entry.get_registered():
                 if item.path.suffix in PICTURE_FILES:
                     entry.de_register()
-                    entry.relocate_file(self.image_movies_path, remove=True, rollover=False, register=False)
+                    entry.relocate_file(self.output_folder.joinpath(self.image_movies_path_base),
+                                        remove=True, rollover=False, register=False)
                     break
+
+    '''def _balance_folders(self, root_path: Path, folder_size: int):
+        """
+        Using this root folder,  loop over each year folder (DDDD) and remove Day and Month folders if the count is
+        below that of folder_size.
+
+        Currently, we have too many Day folders with only one or two picture.   This makes the forest easier to see.
+
+        :param root_path: where to find the  image files
+        :return: None
+        """
+
+        dated_folders = Folder(root_path)
+        for year in dated_folders.children:
+            if year.total < folder_size:
+                year.rollup_files(year.name)
+            else:
+                for month in year.children:
+                    if month.total < folder_size:
+                        month.rollup_files(month.name)'''
 
     def _audit_folders(self, path: Path):
         """
@@ -348,53 +341,43 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 elif size > WARNING_FOLDER_SIZE:
                     self.print(f'  VERY large folder ({size}) found {entry}')
 
-    def get_new_path(self, path_obj: Cleaner, is_duplicate: bool = False, preserve: bool = False) -> Optional[Path]:
+    def get_new_path(self, path_obj: Union[FileCleaner, ImageCleaner], is_duplicate: bool = False) -> Optional[Path]:
         """
-        Using the time stamp and current location/description build a folder path to where this
-        file should be moved to.
+        Using the time stamp and current description build a folder path to where this file should be moved to.
+        Requires self.duplicate_path,  self.small_path,   self.no_date_base
+
+        base/<duplicate>/<small>/<nodate> | <year>/<description> | <year>/<month>/<day>
+
         :param: path_obj,  is the cleaner object we are trying to relocate
         :param: is_duplicate, this is a duplicate file so move it accordingly
-        :param: preserve,  when a duplicate is processed you can optionally keep the old path even if it was wrong.
         :return:  A Path representing where this file should be moved or None, if the base path was None
         """
-        # pylint: disable=too-many-branches
+        date = path_obj.date if path_obj.date else path_obj.folder.date if path_obj.folder else None
+        description_path = self.get_descriptive_path(path_obj)
+
         base = self.output_folder
-        if is_duplicate:
-            base = self.duplicate_path
-            if preserve:  # Used when processing duplicates, preserve the folder components
-                for part in path_obj.path.parent.parts[len(self.output_folder.parts):]:
-                    base = base.joinpath(part)
-                return base
+        base = base if not is_duplicate else self.output_folder.joinpath(self.duplicate_path_base)
+        base = base if not (self.check_for_small and path_obj.is_small) else base.joinpath(self.small_base)
+        base = base if date else base.joinpath(self.no_date_base)
 
-        if self.check_for_small and path_obj.is_small:
-            base = self.small_path
-
-        date = path_obj.date if path_obj.date else None
-        description_path = None
-        if path_obj.folder and self.check_for_folders:
-            description_path = path_obj.folder.recursive_description_lookup(None)
-            if not date:
-                date = path_obj.folder.date
+        if date and description_path:
+            return base.joinpath(str(path_obj.date.year)).joinpath(description_path)
 
         if not date and description_path:
             return base.joinpath(description_path)
 
-        if not date:
-            return base.joinpath(self.no_date_base)
-
-        if description_path:
-            base = base.joinpath(str(path_obj.date.year)).joinpath(description_path)
-        else:
-            base = base.joinpath(str(path_obj.date.year)).\
-                joinpath(str(path_obj.date.month)).\
+        if date and not description_path:
+            new = base.joinpath(str(path_obj.date.year)).joinpath(str(path_obj.date.month)).\
                 joinpath(str(path_obj.date.day))
-        if not base.exists():
-            os.makedirs(base)
+            if not new.exists():
+                new = base.joinpath(str(path_obj.date.year)).joinpath(str(path_obj.date.month))
+            if not new.exists():
+                new = base.joinpath(str(path_obj.date.year))
+            return new
         return base
 
-    async def process_file(self, entry: Union[FileCleaner, ImageCleaner]):  # pylint: disable=too-many-branches
+    async def process_file(self, entry: Union[FileCleaner, ImageCleaner], folder: FolderData):
         """
-        Perform any conversions
         Extract image date
         Calculate new destination folder
         Test Duplicate status
@@ -402,15 +385,10 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         param entry: Cleaner object, promoted to a subclass when processed
         """
         self.increment_progress()
-        await asyncio.sleep(0)
+        await asyncio.sleep(0)  # Allow other sub-processes to interrupt us
         if not entry.is_valid:
             self.print(f'.... File {entry.path} is invalid.')
             return
-
-        if self.do_convert:
-            new = entry.convert(Path(self.working_folder.name), self.migrated_path, remove=self.remove_file(entry))
-            if id(new) != id(entry):  # The file was converted and cleaned up
-                entry = new  # pragma: win   Windows does not do conversions
 
         if entry.path.suffix.lower() not in PICTURE_FILES:
             if entry.path.suffix.lower() in MOVIE_FILES:
@@ -419,48 +397,50 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 self.print(f'.... Ignoring non image file {entry.path}')
                 return
 
-        new_path = self.get_new_path(entry)
-        if not entry.is_registered():
+        # If the input folder contains a valid date,  should it take priority over the pictures date ?
+
+        new_path = entry.build_path_base(self.input_folder)  # something like 1961/09/27 or 1961/picnic_day
+        new_path = new_path if not (self.check_for_small and entry.is_small) else \
+            Path(self.small_base).joinpath(new_path)  # ..._small/1961/09/27 or ..._small/1961/picnic_day
+        new_path = new_path if entry.date else Path(self.no_date_base).joinpath(self.no_date_base) # ..._Nodate etc..
+
+        if not self.output_folder.joinpath(new_path).exists():
             self.print(f'.. File: {entry.path} new file is relocating to {new_path}')
-            entry.relocate_file(new_path, register=True, remove=self.remove_file(entry))
-        else:
+            entry.relocate_file(self.output_folder.joinpath(new_path), register=True, remove=self.remove_file(entry))
+        else:  # This file already exists:
             found = False
-            all_entries = deepcopy(entry.get_all_registered())  # save it, in case something new becomes registered
-            for value in all_entries:
-                if value == entry:  # File contents are identical
-                    if value.path == entry.path:
-                        found = True
-                        if value.path.parent != new_path:  # pragma: no cover   Custom folders have been removed
-                            self.print(f'.. File: {entry.path} existing file is relocating to {new_path}')
-                            entry.relocate_file(new_path, register=True, remove=True)
-                        break
-                    # These identical files are stored in different paths.
-                    if value.path.parent == new_path:  # A copy already exists where we should be
-                        found = True
-                        duplicate_path = self.get_new_path(entry, is_duplicate=True)
-                        self.print(f'.. File: {entry.path} duplicate file relocating to {duplicate_path}')
-                        entry.relocate_file(duplicate_path, remove=self.remove_file(entry))
-                        break
-
+            for value in entry.get_registered():
+                if value == entry:
+                    found = True
+                    entry.relocate_file(self.output_folder.joinpath(self.duplicate_path_base).joinpath(new_path),
+                                        register=False, remove=self.remove_file(entry))
+                    break
             if not found:
-                self.print(f'.. File: {entry.path} similar copy relocating to {new_path}')
-                entry.relocate_file(new_path, register=True, remove=self.remove_file(entry))
+                entry.relocate_file(self.output_folder.joinpath(new_path),
+                                    register=True, rollover=True, remove=self.remove_file(entry))
 
-    async def process_folder(self, folder: FolderCleaner):
+    async def process_folder(self, folder: Path):
         """
         Loop over the folders,  recursive
         :param folder:
         :return:
         """
-        self.print(f'Processing Folder: {folder.path}')
-        for entry in folder.path.iterdir():
-            if entry.is_dir() and entry not in self.ignore_folders:  # Includes APP folders like ..._small
-                this_folder = FolderCleaner(Path(entry), parent=folder, app_name=self.app_name)
-                await self.process_folder(this_folder)
+        self.print(f'Processing Folder: {folder}')
+        this_folder = FolderData.get_folder(folder)
+        if not this_folder:
+            this_folder = FolderData(folder, base_entry=self.input_folder, cache=False)
+
+        for entry in folder.iterdir():
+            if entry.is_dir():
+                this_folder = FolderData.get_folder(entry)
+                if FolderData.is_internal(entry):
+                    self.print(f'Skipping folder {entry}')
+                else:
+                    await self.process_folder(entry)
             elif entry.is_file():
                 self.print(f'. File: {entry}')
                 logger.debug('Processing File:%s', entry)
-                await self.process_file(file_cleaner(entry, folder))
+                await self.process_file(make_cleaner_object(entry), this_folder)
 
     def remove_file(self, obj: Union[FileCleaner, ImageCleaner]) -> bool:
         """
@@ -471,7 +451,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         if str(obj.path).startswith(str(self.input_folder)):
             # This file is on the input path
-            if self.force_keep:  # pragma: win
+            if self.force_keep:
                 return False
             if self.keep_original_files:
                 return False
