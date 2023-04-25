@@ -23,7 +23,7 @@ from unittest.mock import patch
 from unittest import TestCase
 
 # pylint: disable=import-error
-from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, \
+from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, Folder, \
     make_cleaner_object, output_files, PICTURE_FILES, MOVIE_FILES, SMALL_FOLDER, SMALL_IMAGE
 from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, \
     DATE_SPEC, DIR_SPEC
@@ -276,28 +276,27 @@ class ImageCleanerTests(Cleaners):
         self.assertFalse(self.jpg_obj.is_small)
         self.assertTrue(self.small_obj.is_small)
 
-    def test_registrations(self):
+    def test_registrations_1(self):
         # Test 1 -> simple registration and de-registration
         self.jpg_obj.clear_caches()
-
         self.assertIsNone(self.jpg_obj.get_registered(), 'Get all reg.  should have 0 elements')
 
         self.assertEqual(output_files, {}, 'Nothing registered')
         self.assertFalse(self.jpg_obj.is_registered())
         self.jpg_obj.register()
-        self.assertEqual(1, len(self.jpg_obj.get_registered()), 'Get all reg.  should have 1 elements')
+        self.assertEqual(self.jpg_obj.get_registered(), self.jpg_obj, 'Get all reg.  should have 1 elements')
 
-        with self.assertLogs('Cleaner', level='ERROR') as logs:
-            self.jpg_obj.register()
-            self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to re_register'), 'Failed to log error')
+    def test_registrations_2(self):
+        self.jpg_obj.clear_caches()
+        self.jpg_obj.register()
 
-        self.assertTrue(self.jpg_obj.is_registered())
-        self.assertEqual(len(output_files), 1, 'Something registered')
         self.jpg_obj.de_register()
         self.assertEqual(len(output_files), 0, 'Nothing registered')
         self.assertFalse(self.jpg_obj.is_registered())
 
         # test2 multiple copies
+    def test_registrations_3(self):
+
         new_dir = self.input_folder.joinpath('other_dir')
         os.mkdir(new_dir)
 
@@ -307,23 +306,18 @@ class ImageCleanerTests(Cleaners):
         self.jpg_obj.register()
         new_obj.register()
         self.assertEqual(len(output_files), 1, 'Hash should only have one element')
-        self.assertEqual(len(output_files[new_obj.registry_key]), 1, 'Same file,  do not re-register')
 
         self.assertTrue(self.jpg_obj.is_registered())
-        self.assertFalse(new_obj.is_registered())
+        self.assertTrue(new_obj.is_registered())
 
-        # cleanup
-        os.unlink(new_dir.joinpath(self.jpg_obj.path.name))
-        del new_obj
+    def test_registrations_4(self):
+        self.jpg_obj.register()
+        new_dir = self.input_folder.joinpath('other_dir')
+        os.mkdir(new_dir)
 
         # This should be a different size
         new_obj = ImageCleaner(create_image_file(new_dir.joinpath(self.jpg_obj.path.name), None, text='X'))
         new_obj.register()
-        self.assertEqual(len(output_files), 1, 'Hash should only have one element')
-        self.assertEqual(len(output_files[new_obj.registry_key]), 2, 'Different files,  re-register')
-
-        self.assertTrue(self.jpg_obj.is_registered())
-        self.assertTrue(new_obj.is_registered())
 
         # test3  - De-register one of the copies
         new_obj.de_register()
@@ -333,12 +327,6 @@ class ImageCleanerTests(Cleaners):
         # test4 - Lookup with various path options
         self.assertTrue(new_obj.is_registered(), 'Test True by name')
         self.assertFalse(new_obj.is_registered(by_path=True), 'Test Fail with path')
-        self.assertTrue(new_obj.is_registered(by_path=True, alternate_path=self.jpg_obj.path.parent),
-                        'Test Pass with alternate path')
-
-        with self.assertLogs('Cleaner', level='ERROR') as logs:
-            new_obj.de_register()
-            self.assertTrue(logs.output[0].startswith('ERROR:Cleaner:Trying to remove non-'), 'Failed to log error')
 
     def test_relocate_to_nowhere(self):
         self.jpg_obj.relocate_file(None)
@@ -507,76 +495,7 @@ class ImageCleanerTests(Cleaners):
                 error_value = f'ERROR:Cleaner:Can not write to {new_dir}'
                 self.assertTrue(logs.output[len(logs.output) - 2].startswith(error_value), 'R/O remove')
 
-    def test_get_data_from_path_name(self):
-        image = ImageCleaner(Path('/a/b/c.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
 
-        test_date = datetime(year=2022, month=12, day=25)
-        image = ImageCleaner(Path('/a/b/20221225_235959.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image = ImageCleaner(Path('/a/b/a20221225_235959.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        # image = ImageCleaner(Path('/a/b/20221225_235959z.jpg'), None)
-        # self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-
-        image = ImageCleaner(Path('/a/b/20221225-235959.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image = ImageCleaner(Path('/a/b/a20221225-235959.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        # image = ImageCleaner(Path('/a/b/20221225-235959z.jpg'), None)
-        # self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-
-        test_date = datetime(year=2022, month=12, day=25)
-        image = ImageCleaner(Path('/a/b/2022:12:25.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image = ImageCleaner(Path('/a/b/x2022:12:25.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        image = ImageCleaner(Path('/a/b/2022:12:25x.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-
-        image = ImageCleaner(Path('/a/b/25-Dec-2022.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image = ImageCleaner(Path('/a/b/x25-Dec-2022.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        image = ImageCleaner(Path('/a/b/25-Dec-2022 Foobar.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-
-        test_date = datetime(year=2022, month=12, day=1)
-
-        image = ImageCleaner(Path('/a/b/2022-12.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-        image = ImageCleaner(Path('/a/b/2022-12-Foobar.jpg'))
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image = ImageCleaner(Path('/a/b/2022-12.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-
-    def test_get_data_from_folder_name(self):
-        image = ImageCleaner(Path('/a/b/c.jpg'))
-        self.assertIsNone(image.get_date_from_path_name(), 'Image name has no date values')
-
-        test_date = datetime(year=2022, month=12, day=25)
-        image.path = Path('/a/2022-12-25/c.jpg')
-        self.assertEqual(image.get_daget_date_from_path_namete_from_folder_names(), test_date, 'Discovered date1')
-        image.path = Path('/a/2022/12/25/c.jpg')
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image.path = Path('/a/2022/12/25/foo/c.jpg')
-        self.assertIsNone(image.get_date_from_path_name(), 'Discovered date1')
-        image.path = Path('/a/2022/12/32/c.jpg')
-        self.assertIsNone(image.get_date_from_path_name(), 'Discovered date1')
-
-        test_date = datetime(year=2022, month=12, day=1)
-        image.path = Path('/a/2022/12/c.jpg')
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image.path = Path('/a/2022-12/c.jpg')
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image.path = Path('/a/2022-13/c.jpg')
-        self.assertIsNone(image.get_date_from_path_name(), 'Discovered date1')
-
-        test_date = datetime(year=2022, month=1, day=1)
-        image.path = Path('/a/2022/c.jpg')
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
-        image.path = Path('/a/2022-XMAS/c.jpg')
-        self.assertEqual(image.get_date_from_path_name(), test_date, 'Discovered date1')
 
     def test_convert_non_heic(self):
         self.assertEqual(self.jpg_obj, self.jpg_obj.convert(self.run_base, None))

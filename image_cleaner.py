@@ -73,7 +73,7 @@ def app_help(app: ImageClean) -> str:  # pragma: no cover
     """
     return f'{short_help()}' \
            '\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the' \
-           f'"{app.migrated_path_base}" folder' \
+           f'"{app.migration_base}" folder' \
            '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed' \
            '\n-d: Process Duplicates. look for and exact files in duplicate directories - and pick the best' \
            f'\n-s: Check for small files (save in "{app.small_base}" folder) - This WILL slow down processing' \

@@ -396,7 +396,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(cleaner.no_date_base).joinpath('no_date.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.image_movies_path_base).joinpath('no_date.mov').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.movies_base).joinpath('no_date.mov').exists())
         self.assertTrue(cleaner.output_folder.joinpath(cleaner.no_date_base).joinpath('other_no_date.mov').exists())
         self.assertEqual(count_files(self.input_folder), 3)
         self.assertEqual(count_files(self.output_folder), 3)
@@ -419,7 +419,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
             cleaner.verbose = False
             await cleaner.run()
 
-            self.assertTrue(self.output_folder.joinpath(cleaner.migrated_path_base).joinpath(heic_file.name).exists())
+            self.assertTrue(self.output_folder.joinpath(cleaner.migration_base).joinpath(heic_file.name).exists())
             self.assertTrue(heic_file.exists())
             self.assertTrue(self.output_folder.  # Kludge,  I just know the date on the file.  cheater, cheater
                             joinpath('2021').joinpath(f'{heic_file.stem}.jpg').exists())
@@ -443,7 +443,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
             cleaner.do_convert = False
             await cleaner.run()
 
-            self.assertFalse(self.output_folder.joinpath(cleaner.migrated_path_base).joinpath(heic_file.name).exists())
+            self.assertFalse(self.output_folder.joinpath(cleaner.migration_base).joinpath(heic_file.name).exists())
             self.assertTrue(heic_file.exists())
             self.assertTrue(self.output_folder.
                             joinpath('test_instance_NoDate').joinpath(heic_file.name).exists())
@@ -472,7 +472,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
 
         await cleaner.run()
 
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath(DEFAULT_NAME).exists())
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(DEFAULT_NAME).exists())
         self.assertEqual(count_files(self.output_folder), 2)
 
@@ -507,8 +507,8 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath('file.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath('file_0.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath('file_0.jpg').exists())
 
         self.assertEqual(count_files(self.output_folder), 3)
 
@@ -536,7 +536,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
 
         await cleaner.run()
 
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
         self.assertTrue(self.output_folder.joinpath().joinpath('file.jpg').exists())
 
         self.assertEqual(count_files(self.output_folder), 2)
@@ -591,11 +591,11 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(self.other_folder.name).
                         joinpath(internal_date.name).exists())
 
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(str(DATE_SPEC.year)).joinpath('custom').
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(str(DATE_SPEC.year)).joinpath('custom').
                         joinpath(internal_date.name).exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(str(DATE_SPEC.year)).joinpath('jpeg_image.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(str(DATE_SPEC.year)).joinpath('jpeg_image_0.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath('no_date.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(str(DATE_SPEC.year)).joinpath('jpeg_image.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(str(DATE_SPEC.year)).joinpath('jpeg_image_0.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath('no_date.jpg').exists())
 
         self.assertTrue(self.output_folder.joinpath(self.other_folder.name).joinpath('no_date.jpg').exists())
 
@@ -632,8 +632,8 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(YEAR_SPEC).joinpath('file.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(YEAR_SPEC).joinpath('file.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(YEAR_SPEC).joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(cleaner.no_date_base).joinpath('file.jpg').exists())
         self.assertEqual(count_files(self.output_folder), 3)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -753,7 +753,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(YEAR_SPEC).joinpath(input_file.name).exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(YEAR_SPEC).joinpath(output_file.name).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(YEAR_SPEC).joinpath(output_file.name).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -783,7 +783,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(DEFAULT_NAME).exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(next_day).joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(next_day).joinpath(DEFAULT_NAME).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -812,7 +812,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath(DEFAULT_NAME).exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(next_day).joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(next_day).joinpath(DEFAULT_NAME).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -839,7 +839,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(DEFAULT_NAME).exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(str(DATE_SPEC.year)).joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(str(DATE_SPEC.year)).joinpath(DEFAULT_NAME).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -869,7 +869,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath(str(DATE_SPEC.year)).joinpath('file.jpg').exists())
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(next_day).joinpath('file.jpg').exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(next_day).joinpath('file.jpg').exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -898,7 +898,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
 
         self.assertTrue(self.output_folder.joinpath('custom').joinpath(DEFAULT_NAME))
-        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_path_base).joinpath(YEAR_SPEC).joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(cleaner.duplicate_base).joinpath(YEAR_SPEC).joinpath(DEFAULT_NAME).exists())
         self.assertEqual(count_files(self.output_folder), 2)
         self.assertEqual(count_files(self.input_folder), 0)
 
@@ -1063,9 +1063,9 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
             await app.run()
 
             # Auto Cleanup in action
-            self.assertFalse(output_folder.joinpath(app.duplicate_path_base).exists(), 'Duplicate path does not exist')
-            self.assertFalse(output_folder.joinpath(app.migrated_path_base).exists(), 'Migrate path does not exist')
-            self.assertFalse(output_folder.joinpath(app.image_movies_path_base).exists(), 'Movie path does not exist')
+            self.assertFalse(output_folder.joinpath(app.duplicate_base).exists(), 'Duplicate path does not exist')
+            self.assertFalse(output_folder.joinpath(app.migration_base).exists(), 'Migrate path does not exist')
+            self.assertFalse(output_folder.joinpath(app.movies_base).exists(), 'Movie path does not exist')
             self.assertFalse(output_folder.joinpath(app.no_date_base).exists(), 'No_Date path does not exist')
             self.assertFalse(output_folder.joinpath(app.small_base).exists(), 'Small path does not exist')
 
