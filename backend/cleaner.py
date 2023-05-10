@@ -1,12 +1,6 @@
 """
-This is a base class/classes for providing a standard set of attribute on Files/Folders.
-
-- Comparison operators
-- Registrar based hash
--
-
+Base classes for cleaning objects
 """
-
 import logging
 import os
 import platform
@@ -49,8 +43,8 @@ def make_cleaner_object(entry: Path) -> Union[FileCT, ImageCT, FolderCT]:
     :param: entry  - A path object representing the folder or the file
     :return:
     """
-    assert not entry.is_dir()
-    # entry must be a file
+    assert not entry.is_dir()  # entry must be a file
+
     suffix = entry.suffix.lower()
     if suffix in PICTURE_FILES or suffix in MOVIE_FILES:
         return ImageCleaner(entry)
@@ -80,12 +74,15 @@ class CleanerBase:
     """
     def __init__(self, path_entry: Path):
         self.path = path_entry
+
         self._date = None
         self._metadate = False  # Is set when retrieving the date.
 
     def __eq__(self, other) -> bool:
         if self.__class__ == other.__class__:
             try:
+                if os.stat(self.path).st_ino == os.stat(other.path).st_ino:
+                    return True
                 if os.stat(self.path).st_size == os.stat(other.path).st_size:
                     return cmp(self.path, other.path, shallow=False)
             except FileNotFoundError:
@@ -93,44 +90,13 @@ class CleanerBase:
         return False
 
     def __lt__(self, other) -> bool:
-        raise NotImplementedError
+        return False
 
     def __gt__(self, other) -> bool:
-        raise NotImplementedError
+        return False
 
     def __ne__(self, other) -> bool:
         return not self == other
-
-    def registered(self, entry: Path) -> bool:
-        """
-        Test if a file has been registered.   Understand the impacts of rolled over so FOO_0 and FOO are the same
-        :param entry:
-        :return:
-        """
-        assert self.is_file
-
-        target = entry.stem.upper()
-        parsed = re.match('(.+)_[0-9]{1,2}$', target)
-        if parsed:
-            target = parsed.groups()[0]
-        return target in output_files
-
-    @cached_property
-    #@property
-    def is_file(self):
-        """
-        cached value to see if a path is a file or not.
-        :return:
-        """
-        return self.path.is_file()
-
-    @property
-    def metadate(self) -> bool:
-        """
-        getter for determining is we got the data from the image itself or some other source.
-        :return: Boolean
-        """
-        return self._metadate
 
     def convert(self, work_dir: Path, migrated_base: Optional[Path], remove: bool = True) -> FileCT:  # pylint: disable=unused-argument
         """
@@ -145,26 +111,20 @@ class CleanerBase:
     @property
     def date(self) -> Optional[datetime]:
         """
-        the date of an object
-        :return:
+        return the internal value for date, if one exists
         """
         return self._date
 
     @property
     def folder(self) -> Optional[FolderCT]:
+        """
+        Look up a cached folder for this element
+        :return:
+        """
         key = self.path.parent.as_posix()
         if key in output_folders:
             return output_folders[key]
         return None
-
-    def set_date(self):
-        """
-        How dates are set is based (and implemented) at the sub-class level
-        By default set the atime, mtime based on stored time
-        :return:
-        """
-        if self.path.exists() and self.date:
-            os.utime(self.path, (self.date.timestamp(), self.date.timestamp()))
 
     @property
     def is_small(self) -> bool:
@@ -172,15 +132,7 @@ class CleanerBase:
         A test for garbage files
         :return:
         """
-        raise NotImplementedError
-
-    @property
-    def is_valid(self) -> bool:
-        """
-        A way to define and enhance a good file
-        :return:
-        """
-        raise NotImplementedError
+        return False
 
     @cached_property
     def registry_key(self) -> str:
@@ -207,93 +159,119 @@ class CleanerBase:
         if self.folder:
             self.folder.count += 1
 
-    def de_register(self, silent=False):
+    def de_register(self):
         """
         Remove yourself from the list of registered FileClean objects
         """
-        if not self.is_registered():
-            if not silent:
-                logger.error('Trying to remove non-existent %s from output files hashing', self.path)
-        else:
+        if self.registry_key in output_files:
             new_list = []
             for value in output_files[self.registry_key]:
-                if not value == self:
+                if not id(value) == id(self):
                     new_list.append(value)
+                else:
+                    if self.folder:
+                        self.folder.count -= 1
             if not new_list:
                 del output_files[self.registry_key]
             else:
                 output_files[self.registry_key] = new_list
 
-    def is_registered(self, by_path: bool = False, new_path: Path = None) -> bool:
+    def is_registered(self, by_file: bool = False, by_path: bool = False, new_path: Path = None) -> bool:
         """
         Test for existing of a file
+        :param by_file:   Ensure a match on the existing file
         :param by_path:   Ensure a match on the existing path
         :param new_path:  Ensure a match on this other path
         :return:  True if exists
         """
-        return self.get_registered(by_path, new_path) is not None
+        by_path = True if new_path else by_path
+        if not by_path and not by_file:
+            return self.registry_key in output_files
 
-    def get_registered(self, by_path: bool = False, new_path: Path = None) -> Optional[CT]:
+        return len(self.get_registered(by_file, by_path, new_path)) > 0
+
+    def get_registered(self, by_file: bool = False, by_path: bool = False, new_path: Path = None) -> List[CT]:
         """
         Retrieve an existing file object
+        :param by_file:   Ensure a match on the existing file
         :param by_path:   Ensure a match on the existing path
         :param new_path:  Ensure a match on this other path
         :return:  object or None
         """
+        result = []
         by_path = True if new_path else by_path
 
         if self.registry_key in output_files:
-            if not by_path:
-                return output_files[self.registry_key][0]
-
             path_to_test = new_path if new_path else self.path
+            if path_to_test.is_file():
+                path_to_test = path_to_test.parent
             for value in output_files[self.registry_key]:
-                if value.path == path_to_test:
-                    return value
-
-        return None
+                if by_file and by_path:
+                    if self == value and value.path.parent == path_to_test:
+                        result.append(value)
+                elif by_path:
+                    if value.path.parent == path_to_test:
+                        result.append(value)
+                elif by_file:
+                    if self == value:
+                        result.append(value)
+                else:
+                    result.append(value)
+        return result
 
     # File manipulation
 
-    def test_for_duplicate(self, other):
+    def folder_base2(self, input_folder: FolderCT = None, no_date_base: Path = Path()) -> Path:
+        # pylint: disable=too-many-branches
         """
-        Compare a file to the registered versions and return True if exactly equal to one
+        with input as a priority,  build an output path based on dates (folder year/file date) and description
+        Result should look like
+        YYYY/MM/DD or YYYY/Description or YYYY/MM/Description or YYYY/MM/DD/Description or Nothing
+        :param input_folder - The folder from importing of where files without a date should go
+        :param no_date_base - The path base of where files without a date should go
         :return:
         """
-        if self.registry_key in output_files:
-            for entry in output_files[self.registry_key]:
-                if entry == other:
-                    return True
-        return False
+        folder = input_folder if input_folder else self.folder
 
-    def build_base(self) -> Path:
-        """
-        Based on date values,   build a set of directories on YYYY/MM/DD
-        :return:
-        """
-        result = Path()
-        if self.date:
-            result = Path(str(self.date.year)).joinpath(str(self.date.month)).joinpath(str(self.date.day))
-        return result
+        description: str = folder.description if folder else None  # folder.description may also be None
+        dates: Dict = folder.dates if folder.dates else None  # existing date w/description 2022/picnic
 
-    def add_date_to_path(self, base_path: Path) -> Path:
-        """
-        Process the file path to glean the descriptive path parts
-        Anything,  that is not garbage or not a number/date is removed and the path portion is returned
+        for existing in self.get_registered(by_file=True):   # See if we have any duplicates of this input file.
+            folder: FolderCT = existing.folder if existing.folder else None
+            if folder and folder.description and not description:   # If this folder has a description and we don't
+                description = folder.description                    # Then use this folder's description
+                dates = folder.dates if folder.date else dates      # and this folders date if it has date
 
-        :param base_path:
-        :return:
-        """
-        if base_path == Path():  # No existing path bases,  so just use the date.
-            if self.date:
-                base_path = Path(str(self.date.year)).joinpath(str(self.date.month)).joinpath(str(self.date.day))
-                if not base_path.exists():
-                    base_path = Path(str(self.date.year)).joinpath(str(self.date.month))
-                    if not base_path.exists():
-                        base_path = Path(str(self.date.year))
-        else:  # We already have a path description,  so just use the year.
-            base_path = Path(str(self.date.year)).joinpath(base_path)
-        return base_path
+        if description:
+            if dates and dates['date']:
+                path = Path(dates['date'].strftime('%Y'))
+                if dates['month']:
+                    path = path.joinpath(dates['date'].strftime('%m'))
+                if dates['day']:
+                    path = path.joinpath(dates['date'].strftime('%d'))
+            elif self.date:
+                path = Path(self.date.strftime('%Y'))
+            else:
+                path = no_date_base
+            path = path.joinpath(description)
+        else:  # No Description
+            if dates and dates['date']:
+                path = Path(dates['date'].strftime('%Y'))
+                if dates['month']:
+                    path = path.joinpath(dates['date'].strftime('%m'))
+                if dates['day']:
+                    path = path.joinpath(dates['date'].strftime('%d'))
+            elif self.date:
+                path = Path(self.date.strftime('%Y')).\
+                    joinpath(self.date.strftime('%m')).\
+                    joinpath(self.date.strftime('%d'))
+            else:
+                path = no_date_base
+
+        if not self.date and dates and dates['date']:
+            self._date = dates['date']
+
+        return path
 
     def relocate_file(self, new_path: Path, remove: bool = False, rollover: bool = True, register: bool = False):
         """
@@ -330,7 +308,7 @@ class CleanerBase:
 
         if remove and copied:
             try:
-                self.de_register(silent=True)
+                self.de_register()
                 os.unlink(self.path)
             except OSError as error:   # pragma: escape_win
                 logger.debug('%s could not be removed (%s)', self.path, error)
@@ -386,44 +364,31 @@ class Folder(CleanerBase):
         Anything,  that is not garbage or not a number/date is removed and the path portion is returned
     """
 
-    def __init__(self, path_entry: Path, base_entry: Path = None, internal: bool = False, cache: bool = True):
+    def __init__(self, path_entry: Path, base_entry: Path, internal: bool = False, cache: bool = True):
         super().__init__(path_entry)
+        self.internal = internal  # Bool to indicate this is an internal folder so no need to process it
 
         self.dates: Dict = {
             'date': None,  # the time stamp (if any)
-            'date_leaf': False,  # on a multi-part dated
             'month': False,  # set to True if the date really contained a month (by default month is 1)
             'day': False,  # set to True if the date really contained a day (by default day is 1)
         }
-        self.description: str = None
-        self.internal = internal  # Bool to indicate this is an internal folder so no need to process it
+        self.description: str = ''
         self.count: int = 0  # How many files in this folder
-        self.children: List[FolderCT] = []  # Maybe a django reverse lookup would be better.
+        self.children: List[FolderCT] = []  # Sub-folders.
 
-        significant_path = self._significant_path(base_entry)
-
-        if YEAR.match(str(path_entry.stem)) or MONTH_OR_DAY.match(str(path_entry.stem)):
-            self.dates['date_leaf'] = True
-
-        self.set_date_and_description(significant_path)
+        self.set_date_and_description(self.path.relative_to(base_entry))
 
         key = self.path.as_posix()
+        # May 3rd,  added and self.date to if.
+        # if cache and key not in output_folders and self.date:  # Only cache output folders and they must have a date
         if cache and key not in output_folders:
             output_folders[key] = self
 
-    def __lt__(self, other) -> bool:
-        pass
+        if internal:
+            self.description = ''  # Override description on internal folders
 
-    def __gt__(self, other) -> bool:
-        pass
-
-    @property
-    def is_small(self) -> bool:
-        pass
-
-    @property
-    def is_valid(self) -> bool:
-        pass
+        # print(f'{self.path} : {self.date} : {self.count} : {self.description} : {base_entry}')
 
     @classmethod
     def is_internal(cls, path: Path) -> bool:
@@ -440,7 +405,7 @@ class Folder(CleanerBase):
     @classmethod
     def get_folder(cls, path: Path) -> Union[FolderCT, None]:
         """
-        Parse the cache and return a FolderData instance (if it exists)
+        Parse the cache and return a Folder instance (if it exists)
         :param path:
         :return:
         """
@@ -451,40 +416,11 @@ class Folder(CleanerBase):
 
     @property
     def date(self) -> Optional[datetime]:
-        return self.dates['date']
-
-    @property
-    def total(self) -> int:
         """
-        recursive call to get all file counts
-        :return: value of all folders/sub-folders added
-        """
-        count = self.count
-        for child in self.children:
-            count = count + child.total
-        return count
-
-    def build_base(self) -> Path:
-        """
-        Based on date values,   build a set of directories on YYYY/MM/DD
+        Return a datetime value if it exists on this folder (using parsing not stat)
         :return:
         """
-        result = Path()
-        if self.date:
-            result = Path(str(self.folder.date.year))
-            if self.folder.dates['month']:
-                result = result.joinpath(str(self.folder.date.month))
-                if self.folder.dates['day']:
-                    result = result.joinpath(str(self.folder.date.day))
-        return result
-
-    def _significant_path(self, base: Path = None):
-        try:
-            significant_path = self.path if not base else self.path.relative_to(base)
-        except ValueError:
-            significant_path = self.path
-
-        return significant_path
+        return self.dates['date']
 
     def _set_path_description(self, path_string):
         result = Path()
@@ -550,52 +486,32 @@ class Folder(CleanerBase):
                     break
 
 
-
-
-    '''
-    def rollup_files(self, destination: Path):
-        """
-
-        :param destination:
-        :return:
-        """
-        for child in self.children:
-            child.rollup_files(destination)
-
-        files = [f for f in os.listdir(self.name) if os.path.isfile(os.path.join(self.name, f))]
-        for file in files:
-            if not destination.joinpath(file).exists():
-                logger.debug('Moving %s to %s', self.name.joinpath(file), destination)
-                print(f'Moving {self.name.joinpath(file)} to {destination}')
-                os.rename(self.name.joinpath(file), destination.joinpath(file))
-    '''
-
-
 class FileCleaner(CleanerBase):
 
     """
     A class to encapsulate the regular file Path object that is going to be cleaned
     """
 
-    def __ne__(self, other):
-        return not self == other
-
-    def __lt__(self, other):
+    def __lt__(self, other):  # pragma: no cover
         if self == other:  # Our files are the same
             return self.date < other.date
         return False
 
-    def __gt__(self, other):
+    def __gt__(self, other):  # pragma: no cover
         if self == other:
             return self.date > other.date
         return False
 
     @property
-    def is_valid(self) -> bool:
+    def is_valid(self) -> bool:  # pragma: no cover
+        """
+        Test if it is a file and it's not 0
+        :return:
+        """
         return self.path.is_file() and self.path.stat().st_size != 0
 
     @property
-    def is_small(self):
+    def is_small(self):  # pragma: no cover
         """
         No reason for a normal file to be small
         :return: False
@@ -603,7 +519,7 @@ class FileCleaner(CleanerBase):
         return False
 
     @property
-    def date(self):
+    def date(self):  # pragma: no cover
         """
         Should we consider path dates?
         :return:
@@ -625,7 +541,6 @@ class ImageCleaner(CleanerBase):
 
         self._image = None
         self._image_data = []
-        pass
 
     def __eq__(self, other: ImageCT):
         """
@@ -635,9 +550,7 @@ class ImageCleaner(CleanerBase):
         """
         result = super().__eq__(other)
         if not result and other.__class__.__name__ == self.__class__.__name__:
-            self.load_image_data()
-            other.load_image_data()
-            return self.date == other.date and self.date
+            return self.image_data == other.image_data
         return result
 
     def __lt__(self, other):
@@ -664,6 +577,10 @@ class ImageCleaner(CleanerBase):
 
     @property
     def is_valid(self) -> bool:
+        """
+        Test if a file is valid (is a file and not 0
+        :return:
+        """
         return self.path.is_file() and self.path.stat().st_size != 0
 
     @cached_property
@@ -681,16 +598,20 @@ class ImageCleaner(CleanerBase):
         return small
 
     @property
-    def date(self):
+    def date(self) -> Optional[datetime]:
+        """
+        return the cached date or go and try and fetch it
+        :return: datetime or None
+        """
         if not self._date:
             self._date = self.get_date_from_image()
             if not self._date:  # Short circuit to find a date
                 try:
                     temp = self._date = FN_DATE.match(self.path.stem).groups()
-                    self._date = datetime(temp[0], temp[1], temp[2])
-                except AttributeError:
+                    self._date = datetime(int(temp[0]), int(temp[1]), int(temp[2]))
+                except AttributeError:  #os.stat(self.path).st_size == os.stat(other.path).st_size
                     pass
-                except ValueError:
+                except ValueError:  # pragma: no cover
                     pass
                 if not self._date:
                     self._date = self.folder.date if self.folder else None
@@ -707,14 +628,18 @@ class ImageCleaner(CleanerBase):
         :return: None
         """
         if not self._metadate and self.date:
-            exif_dict = piexif.load(str(self.path))
+            try:
+                exif_dict = piexif.load(str(self.path))
 
-            new_date = self.date.strftime("%Y:%m:%d %H:%M:%S")
-            exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
+                new_date = self.date.strftime("%Y:%m:%d %H:%M:%S")
+                exif_dict['Exif'][piexif.ExifIFD.DateTimeDigitized] = new_date
 
-            # Save changes
-            exif_bytes = piexif.dump(exif_dict)
-            piexif.insert(exif_bytes, str(self.path))
+                # Save changes
+                exif_bytes = piexif.dump(exif_dict)
+                piexif.insert(exif_bytes, str(self.path))
+
+            except piexif.InvalidImageDataError:
+                pass  # This is to be expected
 
     def close_image(self):
         """
@@ -849,8 +774,8 @@ class ImageCleaner(CleanerBase):
                 try:
                     date_value, _ = str(image_date, 'utf-8').split(' ')
                     return datetime.strptime(date_value, '%Y:%m:%d')
-                except ValueError:
-                    logger.debug('Corrupt date data %s', self.path)  # pragma: no cover
+                except ValueError:  # pragma: no cover
+                    logger.debug('Corrupt date data %s', self.path)
             else:
                 logger.debug('Could not find a date in %s', self.path)
 

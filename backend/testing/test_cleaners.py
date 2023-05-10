@@ -23,10 +23,9 @@ from unittest.mock import patch
 from unittest import TestCase
 
 # pylint: disable=import-error
-from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, Folder, \
-    make_cleaner_object, output_files, PICTURE_FILES, MOVIE_FILES, SMALL_FOLDER, SMALL_IMAGE
-from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, \
-    DATE_SPEC, DIR_SPEC
+from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, \
+    make_cleaner_object, output_files, PICTURE_FILES, MOVIE_FILES
+from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files
 
 
 class CleanerUtilsTest(unittest.TestCase):
@@ -65,6 +64,13 @@ class CleanersInitTest(TestCase):
         self.assertEqual(new_obj.path, Path('/fake_parent/fake_dir/fake.file'))
         self.assertIsNone(new_obj._date)
 
+    def test_date(self):
+        test_obj = CleanerBase(Path('/does/not/need.to_exist'))
+        self.assertIsNone(test_obj.date)
+        now = datetime.now()
+        test_obj._date = now  # pylint: disable=protected-access
+        self.assertEqual(test_obj.date, now)
+
 
 class Cleaners(TestCase):
 
@@ -96,30 +102,18 @@ class CleanerTests(Cleaners):
         self.file1 = CleanerBase(create_file(self.input_folder.joinpath('a.file')))
         self.file2 = CleanerBase(create_file(self.input_folder.joinpath('b.file')))
 
-    def test_compare(self):
-        with self.assertRaises(NotImplementedError):
-            _ = self.file1 > self.file2
-        with self.assertRaises(NotImplementedError):
-            _ = self.file1 < self.file2
+    def test_default_compare(self):
+        self.assertFalse(self.file1 > self.file2)
+        self.assertFalse(self.file2 < self.file1)
+        self.assertFalse(self.file1 < self.file2)
+        self.assertFalse(self.file2 > self.file1)
+
 
     def test_no_convert(self):
         self.assertEqual(self.file1.convert(None, None).path, self.file1.path)
 
     def test_notimplemented(self):
-        with self.assertRaises(NotImplementedError):
-            _ = self.file1.is_small
-
-    """    
-    def test_is_valid(self):
-        self.assertTrue(self.file1.is_valid, 'Valid file is not valid')
-        fake = CleanerBase(Path('/a/b.c'), None)
-        self.assertFalse(fake.is_valid, 'Testing a fake file')
-        empty_file = create_file(self.input_folder.joinpath('fake'), empty=True)
-        empty = CleanerBase(Path(empty_file), None)
-        self.assertFalse(empty.is_valid, 'Testing an empty file')
-        folder = CleanerBase(self.input_folder, None)
-        self.assertFalse(folder.is_valid, 'Testing a directory like it a file')
-    """
+        self.assertFalse(self.file1.is_small)
 
     def test_registry_key(self):
         original_path = self.file1.path
@@ -160,7 +154,8 @@ class ImageCleanerTests(Cleaners):
 
         my_location = Path(os.path.dirname(__file__))
         self.heic_obj = ImageCleaner(
-            copy_file(my_location.joinpath('data').joinpath('heic_image.HEIC'), Path(self.temp_base.name)))
+            copy_file(my_location.joinpath('data').joinpath('heic_image.HEIC'),
+                      Path(self.temp_base.name).joinpath('heic')))
 
         self.jpg_obj = ImageCleaner(
             create_image_file(Path(self.temp_base.name).joinpath('jpeg_image.jpg'), None))
@@ -195,13 +190,6 @@ class ImageCleanerTests(Cleaners):
         with self.assertLogs('Cleaner', level='DEBUG') as logs:
             image_error.open_image()
             self.assertTrue(logs.output[0].startswith('DEBUG:Cleaner:open_image OSError'),  image_error.path.name)
-
-    def test_os_image_error_not_found(self):
-        image_error = ImageCleaner(Path('fake_faker_fakest.jpg'))
-        with self.assertLogs('Cleaner', level='ERROR') as logs:
-            result = image_error == image_error  # pylint: disable=comparison-with-itself
-            self.assertTrue(logs.output[0].startswith(f'ERROR:Cleaner:File {image_error.path.name}'),  "Doesn't exist.")
-        self.assertFalse(result, 'Compare to non-existent file should fail')
 
     def test_image_data(self):
         # pylint: disable=protected-access
@@ -279,12 +267,12 @@ class ImageCleanerTests(Cleaners):
     def test_registrations_1(self):
         # Test 1 -> simple registration and de-registration
         self.jpg_obj.clear_caches()
-        self.assertIsNone(self.jpg_obj.get_registered(), 'Get all reg.  should have 0 elements')
+        self.assertListEqual(self.jpg_obj.get_registered(), [], 'Get all reg.  should have 0 elements')
 
         self.assertEqual(output_files, {}, 'Nothing registered')
         self.assertFalse(self.jpg_obj.is_registered())
         self.jpg_obj.register()
-        self.assertEqual(self.jpg_obj.get_registered(), self.jpg_obj, 'Get all reg.  should have 1 elements')
+        self.assertEqual(self.jpg_obj.get_registered()[0], self.jpg_obj, 'Get all reg.  should have 1 elements')
 
     def test_registrations_2(self):
         self.jpg_obj.clear_caches()
@@ -504,7 +492,7 @@ class ImageCleanerTests(Cleaners):
         if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
 
             with self.assertLogs('Cleaner', level='DEBUG') as logs:
-                new_obj = self.heic_obj.convert(self.run_base, self.migration_base)  # Default  remove=True
+                new_obj = self.heic_obj.convert(self.run_base, self.migration_base.joinpath('heic'))  # Default  remove=True
                 self.assertTrue(logs.output[len(logs.output) - 1].startswith('DEBUG:Cleaner:Will not copy to myself'))
 
             self.assertNotEqual(self.heic_obj, new_obj)
@@ -593,6 +581,7 @@ class FileTests(Cleaners):
         self.assertEqual(older.date, old_time)
         self.assertTrue(newer > older)
         self.assertTrue(older < newer)
+
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()

@@ -11,7 +11,7 @@ from piexif import ImageIFD, ExifIFD, dump, insert, load
 from PIL import Image, ImageDraw
 
 DATE_SPEC = datetime(1961, 9, 27)
-DIR_SPEC = Path(str(DATE_SPEC.year)).joinpath(str(DATE_SPEC.month)).joinpath(str(DATE_SPEC.day))
+DIR_SPEC = Path(DATE_SPEC.strftime('%Y')).joinpath(DATE_SPEC.strftime('%m')).joinpath(DATE_SPEC.strftime('%d'))
 YEAR_SPEC = Path(str(DATE_SPEC.year))
 DEFAULT_NAME = 'file.jpg'
 
