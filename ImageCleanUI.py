@@ -31,7 +31,7 @@ from kivy.uix.widget import Widget
 from kivy.core.window import Window
 
 sys.path.append('.')
-from backend.cleaner import FileCleaner, FolderCleaner  # pylint: disable=import-error
+from backend.cleaner import FileCleaner, Folder  # pylint: disable=import-error
 from backend.image_clean import ImageClean  # pylint: disable=import-error
 
 if platform.system() == 'Windows':
@@ -107,7 +107,8 @@ def calculate_size(path, which):
     which.value = -1  # -1 is a test for uninitialized
     value = 0
     for base, dirs, files in os.walk(path):
-        if Path(base) not in cleaner_app.ignore_folders:
+        if not Folder.is_internal(base):
+        # if Path(base) not in cleaner_app.ignore_folders:
             for _ in files:
                 value += 1
     which.value = value
@@ -141,12 +142,12 @@ async def update_label(path: Path, which):
 
 
 async def run_application():
-    master = FolderCleaner(cleaner_app.input_folder,
-                           parent=None,
-                           root_folder=cleaner_app.input_folder,
-                           output_folder=cleaner_app.output_folder)
+    #master = Folder(cleaner_app.input_folder,
+    #                       parent=None,
+    #                       root_folder=cleaner_app.input_folder,
+    #                       output_folder=cleaner_app.output_folder)
 
-    master.description = None
+    #master.description = None
     await cleaner_app.run()
 
     # root_folder=cleaner_app.no_date_path
@@ -208,13 +209,13 @@ class CheckBoxItem(BoxLayout):
     @staticmethod
     def value_keep_originals():
         return cleaner_app.keep_original_files
-    @staticmethod
-    def set_process_duplicates(touch):
-        cleaner_app.check_for_duplicates = touch
+    #@staticmethod
+    #def set_process_duplicates(touch):
+    #    cleaner_app.check_for_duplicates = touch
 
-    @staticmethod
-    def value_process_duplicates():
-        return cleaner_app.check_for_duplicates
+    #@staticmethod
+    #def value_process_duplicates():
+    #    return cleaner_app.check_for_duplicates
     @staticmethod
     def set_process_small(touch):
         cleaner_app.check_for_small = touch

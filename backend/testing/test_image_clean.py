@@ -50,6 +50,31 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         os.mkdir(self.output_folder)
         os.mkdir(self.input_folder)
 
+    @patch('pathlib.Path.home')  # strange date extended base on import
+    async def test_use_case_9_a(self, home):
+        """
+        Found in test runs
+        Input <in>/2008_04_12_02/151-5181_IMG.JPG
+
+        Output <out>/2008/04/12/02/151-5181_IMG.JPG
+
+        On reimport out to out it moved to the correct possition:
+        Output <out>/2008/04/12/151-5181_IMG.JPG
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+        input_file = create_image_file(self.input_folder.joinpath('2008_04_12_02'), DATE_SPEC)
+        output = self.output_folder.joinpath('2008').joinpath('04').joinpath('12').joinpath(DEFAULT_NAME)
+
+        self.assertTrue(input_file.exists())
+        self.assertFalse(output.exists())
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder,
+                             verbose=False, keep_originals=False)
+        await cleaner.run()
+        self.assertFalse(input_file.exists())
+        self.assertTrue(output.exists())
 
     @patch('pathlib.Path.home')  # Move a file using internal date stamp
     async def test_use_case_9(self, home):
@@ -382,8 +407,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
 
         await cleaner.run()
         self.assertFalse(input_file.exists())
-        self.assertTrue(self.output_folder.
-                        joinpath(DIR_SPEC).joinpath('custom').joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(YEAR_SPEC).joinpath('09-27 custom').joinpath(DEFAULT_NAME).exists())
 
     @patch('pathlib.Path.home')  # To different images going to the same place
     async def test_different_file_exists(self, home):
@@ -509,7 +533,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
 
         await cleaner.run()
         self.assertTrue(self.output_folder.
-                        joinpath(YEAR_SPEC).joinpath('02').joinpath('custom').joinpath(DEFAULT_NAME).exists())
+                        joinpath(YEAR_SPEC).joinpath('02 custom').joinpath(DEFAULT_NAME).exists())
         self.assertTrue(input_file2.exists())
 
         self.assertEqual(count_files(self.output_folder), 2)

@@ -146,7 +146,7 @@ class CleanerBase:
             target = parsed.groups()[0]
         return target
 
-    def register(self):
+    def register(self, base_folder: Path = None):
         """
         Register the existence of a file and update the folder count.
         :return:
@@ -155,6 +155,9 @@ class CleanerBase:
         if self.registry_key not in output_files:
             output_files[self.registry_key] = []
         output_files[self.registry_key].append(self)
+
+        if base_folder and not self.folder:
+            Folder(self.path.parent, base_folder, cache=True)
 
         if self.folder:
             self.folder.count += 1
@@ -232,9 +235,8 @@ class CleanerBase:
         :return:
         """
         folder = input_folder if input_folder else self.folder
-
         description: str = folder.description if folder else None  # folder.description may also be None
-        dates: Dict = folder.dates if folder.dates else None  # existing date w/description 2022/picnic
+        dates: Dict = folder.dates if folder else None  # existing date w/description 2022/picnic
 
         for existing in self.get_registered(by_file=True):   # See if we have any duplicates of this input file.
             folder: FolderCT = existing.folder if existing.folder else None
@@ -245,15 +247,18 @@ class CleanerBase:
         if description:
             if dates and dates['date']:
                 path = Path(dates['date'].strftime('%Y'))
-                if dates['month']:
-                    path = path.joinpath(dates['date'].strftime('%m'))
                 if dates['day']:
-                    path = path.joinpath(dates['date'].strftime('%d'))
+                    path = path.joinpath(f"{dates['date'].strftime('%m-%d')} {description}")
+                elif dates['month']:
+                    path = path.joinpath(f"{dates['date'].strftime('%m')} {description}")
+                else:
+                    path = path.joinpath(description)
             elif self.date:
                 path = Path(self.date.strftime('%Y'))
+                path = path.joinpath(description)
             else:
                 path = no_date_base
-            path = path.joinpath(description)
+                path = path.joinpath(description)
         else:  # No Description
             if dates and dates['date']:
                 path = Path(dates['date'].strftime('%Y'))
@@ -273,9 +278,12 @@ class CleanerBase:
 
         return path
 
-    def relocate_file(self, new_path: Path, remove: bool = False, rollover: bool = True, register: bool = False):
+    # pylint: disable=too-many-arguments
+    def relocate_file(self, new_path: Path, base_folder: Path = None, remove: bool = False, rollover: bool = True,
+                      register: bool = False):
         """
         :param new_path: A string representation of the folder
+        :param base_folder: The root of the output folder
         :param remove: A boolean (default: False) Once successful on the relocate,   remove the original
         :param rollover: A boolean (default: True) rollover an existing file if it exists otherwise ignore
         :param register: A boolean (default:False), register this value after the move
@@ -297,7 +305,7 @@ class CleanerBase:
                     self.rollover_file(new_file)
                 else:
                     logger.debug('Will not overwrite %s', new_file)
-                    remove = False
+                    copied = True
 
             if not new_file.exists():
                 try:
@@ -318,7 +326,7 @@ class CleanerBase:
             self.set_date()
 
         if register and new_file and copied:
-            self.register()
+            self.register(base_folder=base_folder)
 
     @staticmethod
     def rollover_file(destination: Path):
@@ -427,8 +435,9 @@ class Folder(CleanerBase):
         path = Path(path_string)
         for part in path.parts:
             if part != '.' and not (len(part) == 22 and part.find(' ') == -1):
+
                 try:
-                    int(part)
+                    int(CLEAN.sub('', part.rstrip()))
                 except ValueError:
                     if not SKIP_FOLDER.match(part):  # Date folder looking like a string
                         result = result.joinpath(CLEAN.sub('', part.rstrip()))

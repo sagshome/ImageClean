@@ -22,10 +22,12 @@ from pathlib import Path
 from unittest.mock import patch
 from unittest import TestCase
 
+import piexif
+
 # pylint: disable=import-error
 from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, \
     make_cleaner_object, output_files, PICTURE_FILES, MOVIE_FILES
-from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files
+from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, DATE_SPEC
 
 
 class CleanerUtilsTest(unittest.TestCase):
@@ -107,7 +109,6 @@ class CleanerTests(Cleaners):
         self.assertFalse(self.file2 < self.file1)
         self.assertFalse(self.file1 < self.file2)
         self.assertFalse(self.file2 > self.file1)
-
 
     def test_no_convert(self):
         self.assertEqual(self.file1.convert(None, None).path, self.file1.path)
@@ -483,6 +484,18 @@ class ImageCleanerTests(Cleaners):
                 error_value = f'ERROR:Cleaner:Can not write to {new_dir}'
                 self.assertTrue(logs.output[len(logs.output) - 2].startswith(error_value), 'R/O remove')
 
+    @patch('piexif.load')
+    def test_invalid_date(self,  my_exif_dict):
+        my_exif_dict.return_value = {}
+        self.assertIsNone(self.jpg_obj.date)
+        my_exif_dict.return_value = {'0th': {piexif.ImageIFD.DateTime: b'1961:09:27 00:00:00'}}
+        self.assertEqual(self.jpg_obj.date, DATE_SPEC)
+        self.jpg_obj._date = None  # pylint: disable=protected-access
+        my_exif_dict.return_value = {'Exif': {piexif.ExifIFD.DateTimeDigitized: b'1961:09:26 00:00:00'}}
+        self.assertEqual(self.jpg_obj.date, DATE_SPEC-timedelta(days=1))
+        self.jpg_obj._date = None  # pylint: disable=protected-access
+        my_exif_dict.return_value = {'Exif': {piexif.ExifIFD.DateTimeOriginal: b'1961:09:25 00:00:00'}}
+        self.assertEqual(self.jpg_obj.date, DATE_SPEC-timedelta(days=2))
 
 
     def test_convert_non_heic(self):

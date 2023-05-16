@@ -8,6 +8,7 @@ import os
 import pickle
 import sys
 import tempfile
+# import traceback
 
 from pathlib import Path
 from typing import Union, Dict, TypeVar
@@ -96,12 +97,12 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 self.keep_original_files = kwargs[key]
             elif key == 'check_small':
                 self.check_for_small = kwargs[key]
-            elif key == 'check_description':
-                self.check_for_folders = kwargs[key]
+            # elif key == 'check_description':
+            #    self.check_for_folders = kwargs[key]
             else:  # pragma: no cover
                 error_str = 'Argument:%s is being skipped failed', key
                 logger.debug(error_str)
-                assert False, error_str
+                # assert False, error_str
 
     def save_config(self):  # pragma: no cover
         """
@@ -176,7 +177,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         self.setup()
         # Start it up.
-
         self.print('Starting Imports.')
         await self.import_folder(self.input_folder)
         self.teardown()
@@ -233,6 +233,9 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         param entry: Cleaner object, File or Image
         """
 
+        # if entry.path.name == '151-5181_IMG.JPG':
+        #    pass
+
         self.increment_progress()
         await asyncio.sleep(0)  # Allow other sub-processes to interrupt us
         if not entry.is_valid:
@@ -261,6 +264,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         # We have entry.path,  relo_path,  existing.path
         if entry.is_registered(by_file=True, by_path=True) and entry.path.parent == relo_path:
             return  # This is in fact me.
+        logger.debug('  Importing File:%s', entry)
         if entry.is_registered(by_file=True, new_path=relo_path):  # This is a copy of me,  I am a duplicate
             dup_folder = self.output_folder.joinpath(self.duplicate_base).joinpath(decorator).joinpath(folder_base)
             entry.relocate_file(dup_folder, register=False, rollover=False, remove=self.remove_file(entry))
@@ -277,7 +281,8 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         elif entry.is_registered(new_path=relo_path):  # This is the same path, different file
             rollover = True
         # else, i new or a file with the same base name living elsewhere
-        entry.relocate_file(relo_path, register=True, rollover=rollover, remove=self.remove_file(entry))
+        entry.relocate_file(relo_path, base_folder=self.output_folder, register=True, rollover=rollover,
+                            remove=self.remove_file(entry))
 
     async def import_folder(self, folder: Path):
         """
@@ -285,7 +290,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         :param folder:
         :return:
         """
-        self.print(f'Importing Folder: {folder}')
+        self.print(f'Scanning Folder: {folder}')
         this_folder = Folder(folder, self.input_folder, cache=False)
         if folder == self.output_folder.joinpath(self.no_date_base):
             this_folder.description = ''  # This is a special case where we are reimporting ourselves
@@ -298,7 +303,6 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                     await self.import_folder(entry)
             else:
                 self.print(f'. File: {entry}')
-                logger.debug('Importing File:%s', entry)
                 await self.import_file(make_cleaner_object(entry), this_folder)
 
     def remove_file(self, obj: Union[FileCleaner, ImageCleaner] = None) -> bool:
