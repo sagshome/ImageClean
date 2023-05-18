@@ -1,12 +1,6 @@
 # .coveragerc to control coverage.py
-[run]
+[coverage:run]
 branch = False
-plugins = coverage_conditional_plugin
-
-[coverage_conditional_plugin]
-rules =
-    "platform_system == 'Windows'": win
-    "platform_system != 'Windows'" : other
 
 [report]
 # Regexes for lines to exclude from consideration
@@ -26,7 +20,7 @@ exclude_lines =
     if 0:
     # if __name__ == .__main__.:
 
-ignore_errors = True
+ignore_errors = False
 
 [html]
 directory = coverage_html_report

@@ -147,7 +147,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
 
         assert os.access(self.output_folder, os.W_OK | os.X_OK)
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
-            self.force_keep = True
+            self.force_keep = True  # pragma: no cover
 
         # Register our internal folders
         Folder(self.output_folder, self.output_folder, internal=True)

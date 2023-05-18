@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 import pytest
 
-# xpylint: disable=import-error
+# pylint: disable=import-error
 from backend.cleaner import CleanerBase, ImageCleaner
 from backend.image_clean import ImageClean
 from Utilities.test_utilities import create_file, create_image_file, count_files
@@ -75,6 +75,70 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
         self.assertFalse(input_file.exists())
         self.assertTrue(output.exists())
+
+    @patch('pathlib.Path.home')  # Importing existing  _NoDate,  causes all kinds of weirdness
+    async def test_use_case_9_ba(self, home):
+        """
+        Found in test runs
+        Input <in>/2008_04_12_02/151-5181_IMG.JPG
+
+        Output <out>/2008/04/12/02/151-5181_IMG.JPG
+
+        On reimport out to out it moved to the correct possition:
+        Output <out>/2008/04/12/151-5181_IMG.JPG
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder,
+                             verbose=False, keep_originals=False)
+
+        input_file1 = create_image_file(self.input_folder.joinpath(cleaner.no_date_base).joinpath('one.jpg'), None)
+        input_file2 = create_image_file(
+            self.input_folder.joinpath(cleaner.no_date_base).joinpath('foobar').joinpath('two.jpg'), None)
+        output_file1 = self.output_folder.joinpath(cleaner.no_date_base).joinpath('one.jpg')
+        output_file2 = self.output_folder.joinpath(cleaner.no_date_base).joinpath('foobar').joinpath('two.jpg')
+
+        self.assertTrue(input_file1.exists())
+        self.assertTrue(input_file2.exists())
+        self.assertFalse(output_file1.exists())
+        self.assertFalse(output_file2.exists())
+
+        await cleaner.run()
+
+        self.assertFalse(input_file1.exists())
+        self.assertFalse(input_file2.exists())
+        self.assertTrue(output_file1.exists())
+        self.assertTrue(output_file2.exists())
+
+    @patch('pathlib.Path.home')  # Reimporting existing  _NoDate,  causes all kinds of weirdness
+    async def test_use_case_9_bb(self, home):
+        """
+        Found in test runs
+        Input <in>/2008_04_12_02/151-5181_IMG.JPG
+
+        Output <out>/2008/04/12/02/151-5181_IMG.JPG
+
+        On reimport out to out it moved to the correct possition:
+        Output <out>/2008/04/12/151-5181_IMG.JPG
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.input_folder,
+                             verbose=False, keep_originals=False)
+
+        input_file1 = create_image_file(self.input_folder.joinpath(cleaner.no_date_base).joinpath('one.jpg'), None)
+        input_file2 = create_image_file(
+            self.input_folder.joinpath(cleaner.no_date_base).joinpath('foobar').joinpath('two.jpg'), None)
+
+        self.assertTrue(input_file1.exists())
+        self.assertTrue(input_file2.exists())
+
+        await cleaner.run()
+
+        self.assertTrue(input_file1.exists())
+        self.assertTrue(input_file2.exists())
 
     @patch('pathlib.Path.home')  # Move a file using internal date stamp
     async def test_use_case_9(self, home):
@@ -178,7 +242,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(input_file.exists())
         self.assertTrue(output.exists())
 
-    @patch('pathlib.Path.home')
+    @patch('pathlib.Path.home')  # Input Folder == Parent of Output Folder
     async def test_use_case_4(self, home):
         """
         Use Case 4)
@@ -208,7 +272,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(input_file.exists())
         self.assertTrue(output.exists())
 
-    @patch('pathlib.Path.home')
+    @patch('pathlib.Path.home')  # Store small files separately
     async def test_use_case_5(self, home):
         """
         Use Case 5) - Support small files
@@ -237,7 +301,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(input_file.exists())
         self.assertTrue(output_file.exists())
 
-    @patch('pathlib.Path.home')
+    @patch('pathlib.Path.home')  # Ignore non-image files
     async def test_use_case_7(self, home):
         """
         Use Case 7) - Ignore non-image files
@@ -262,7 +326,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
         self.assertTrue(input_file.exists())
 
-    @patch('pathlib.Path.home')
+    @patch('pathlib.Path.home')  # Archive movie files
     async def test_use_case_8(self, home):
         """
         Use Case 8) - Archive movie files
@@ -285,7 +349,7 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(input_file.exists())
         self.assertTrue(output_file.exists())
 
-    @patch('pathlib.Path.home')
+    @patch('pathlib.Path.home')  # Archive movie files (input had a date)
     async def test_use_case_8b(self, home):
         """
         Use Case 8) - Archive movie files (input had a date)
@@ -583,6 +647,31 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(count_files(self.input_folder), 0)
         self.assertEqual(count_files(self.output_folder), 3)
 
+    @patch('builtins.print')
+    @patch('pathlib.Path.home')  # Don't process internal folders
+    async def test_skip_internal_1(self, home, my_print):
+
+        """
+        exercise this code - I am not sure why it is an escape on Windows
+
+        if Folder.is_internal(entry) and (not entry == self.input_folder.joinpath(self.no_date_base)):
+            self.print(f'Skipping folder {entry}')  # We always process no_date_base
+        """
+        home.return_value = Path(self.temp_base.name)
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.input_folder, verbose=False)
+
+        input_file = create_image_file(self.input_folder.joinpath(cleaner.movies_base), DATE_SPEC)
+
+        cleaner.verbose = False
+        await cleaner.run()
+        my_print.assert_not_called()
+
+        cleaner.verbose = True
+        await cleaner.run()
+        my_print.assert_called()
+
+        self.assertTrue(input_file.exists())
+
 
 class InitTest(unittest.IsolatedAsyncioTestCase):
 
@@ -675,7 +764,8 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
             app.input_folder = input_folder
             app.verbose = False
 
-            os.chmod(output_folder, mode=stat.S_IREAD)  # set to R/O
+            os.chmod(output_folder, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
+
             with pytest.raises(AssertionError):  # Must assert with R/O output folder
                 await app.run()
 
@@ -695,6 +785,7 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(output_folder.joinpath(app.movies_base).exists(), 'Movie path does not exist')
             self.assertFalse(output_folder.joinpath(app.no_date_base).exists(), 'No_Date path does not exist')
             self.assertFalse(output_folder.joinpath(app.small_base).exists(), 'Small path does not exist')
+
 
 
 class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-many-instance-attributes
@@ -817,6 +908,7 @@ class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-man
         self.assertTrue(cleaner.remove_file(output_object))
 
         cleaner.teardown()
+
 
 if __name__ == '__main__':  # pragma: no cover
     unittest.main()

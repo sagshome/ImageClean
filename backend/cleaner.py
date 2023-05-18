@@ -16,6 +16,9 @@ from PIL import Image, UnidentifiedImageError
 
 import piexif
 
+if platform.system() != 'Windows':  # pragma: no cover
+    import pyheif  # pylint: disable=import-outside-toplevel, import-error
+
 logger = logging.getLogger('Cleaner')
 
 
@@ -230,10 +233,24 @@ class CleanerBase:
         with input as a priority,  build an output path based on dates (folder year/file date) and description
         Result should look like
         YYYY/MM/DD or YYYY/Description or YYYY/MM/Description or YYYY/MM/DD/Description or Nothing
+
+        May 15th/2023 - I have an issue with _NoDate folders/<sub_folder>  they keep growing.   To get around this
+        I am going to implement no duplicates on the path.   So you cant have .../vacation/vacation/etc///
+
         :param input_folder - The folder from importing of where files without a date should go
         :param no_date_base - The path base of where files without a date should go
         :return:
         """
+        def strip_part(path_description: str) -> str:
+            desc_as_path = Path(path_description)  # Work in paths to support Unix/Windows
+            part_to_strip = str(no_date_base)
+            result = Path()
+
+            for path_part in desc_as_path.parts:
+                if path_part != part_to_strip:
+                    result = result.joinpath(path_part)
+            return result
+
         folder = input_folder if input_folder else self.folder
         description: str = folder.description if folder else None  # folder.description may also be None
         dates: Dict = folder.dates if folder else None  # existing date w/description 2022/picnic
@@ -245,6 +262,7 @@ class CleanerBase:
                 dates = folder.dates if folder.date else dates      # and this folders date if it has date
 
         if description:
+            description = strip_part(description) if no_date_base != Path() else description
             if dates and dates['date']:
                 path = Path(dates['date'].strftime('%Y'))
                 if dates['day']:
@@ -311,14 +329,14 @@ class CleanerBase:
                 try:
                     copyfile(str(self.path), new_file)
                     copied = True
-                except PermissionError as error:
+                except PermissionError as error:  # pragma: no cover
                     logger.error('Can not write to %s - %s', new_path, error)
 
         if remove and copied:
             try:
                 self.de_register()
                 os.unlink(self.path)
-            except OSError as error:   # pragma: escape_win
+            except OSError as error:   # pragma: no cover
                 logger.debug('%s could not be removed (%s)', self.path, error)
 
         if copied:
@@ -356,6 +374,12 @@ class CleanerBase:
         """
         output_files.clear()
         output_folders.clear()
+
+    def set_date(self):  # pragma: no cover
+        """
+        Just a stub,  nothing to see here - move along
+        """
+        pass  # pylint: disable=unnecessary-pass
 
 
 class Folder(CleanerBase):
@@ -405,8 +429,8 @@ class Folder(CleanerBase):
         :param path:
         :return:
         """
-        path_str = str(path)
-        if path_str in output_folders and output_folders[path_str].internal:
+        key = path.as_posix()
+        if key in output_folders and output_folders[key].internal:
             return True
         return False
 
@@ -728,35 +752,33 @@ class ImageCleaner(CleanerBase):
         if platform.system() == 'Windows':
             # This option is not supported via GUI so no one should see this logger.error
             logger.error('Conversion from HEIC is not supported on Windows')
-            return self
+        else:  # pragma: no cover
+            original_name = self.path
+            new_name = work_dir.joinpath(f'{self.path.stem}.jpg')
 
-        import pyheif  # pylint: disable=import-outside-toplevel, import-error
+            if new_name.exists():
+                new_name.unlink()
+                logger.debug('Cleaning up %s - It already exists', new_name)
 
-        original_name = self.path
-        new_name = work_dir.joinpath(f'{self.path.stem}.jpg')
-
-        if new_name.exists():
-            new_name.unlink()
-            logger.debug('Cleaning up %s - It already exists', new_name)
-
-        exif_dict = None
-        heif_file = pyheif.read(original_name)
-        image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw", heif_file.mode, heif_file.stride)
-        try:
-            for metadata in heif_file.metadata or []:
-                if 'type' in metadata and metadata['type'] == 'Exif':  # pragma: no branch
-                    exif_dict = piexif.load(metadata['data'])
-            if exif_dict:
-                exif_bytes = piexif.dump(exif_dict)
-                image.save(new_name, format("JPEG"), exif=exif_bytes)
-                if migrated_base:
-                    self.relocate_file(migrated_base, remove=remove, rollover=False)
-                elif remove:
-                    original_name.unlink()
-                return ImageCleaner(Path(new_name))
-        except AttributeError as error:  # pragma: no cover
-            logger.error('Conversion error: %s - Reason %s is no metadata attribute', self.path, error)
-        return self  # pragma: no cover
+            exif_dict = None
+            heif_file = pyheif.read(original_name)
+            image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw",
+                                    heif_file.mode, heif_file.stride)
+            try:
+                for metadata in heif_file.metadata or []:
+                    if 'type' in metadata and metadata['type'] == 'Exif':  # pragma: no branch
+                        exif_dict = piexif.load(metadata['data'])
+                if exif_dict:
+                    exif_bytes = piexif.dump(exif_dict)
+                    image.save(new_name, format("JPEG"), exif=exif_bytes)
+                    if migrated_base:
+                        self.relocate_file(migrated_base, remove=remove, rollover=False)
+                    elif remove:
+                        original_name.unlink()
+                    return ImageCleaner(Path(new_name))
+            except AttributeError as error:
+                logger.error('Conversion error: %s - Reason %s is no metadata attribute', self.path, error)
+        return self
 
     def get_date_from_image(self) -> Union[datetime, None]:  # pylint: disable=inconsistent-return-statements
         """
