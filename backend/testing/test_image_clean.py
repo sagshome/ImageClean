@@ -224,14 +224,14 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
               dated.jpg
 
         Output:
-        <output/YYYY/foobar/dated.jpg
+        <output/YYYY/MM/DD/dated.jpg
 
         :param home:
         :return:
         """
         home.return_value = Path(self.temp_base.name)
         input_file = create_image_file(self.output_folder.joinpath('foobar'), DATE_SPEC)
-        output = self.output_folder.joinpath(YEAR_SPEC).joinpath('foobar').joinpath(DEFAULT_NAME)
+        output = self.output_folder.joinpath(DIR_SPEC).joinpath(DEFAULT_NAME)
 
         self.assertTrue(input_file.exists())
         self.assertFalse(output.exists())
@@ -271,6 +271,33 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         await cleaner.run()
         self.assertFalse(input_file.exists())
         self.assertTrue(output.exists())
+
+    @patch('pathlib.Path.home')  # Input Folder == Child of Output Folder
+    async def test_use_case_4a(self, home):
+        """
+        Use Case 4)
+            Input Folder == Parent of Output Folder
+
+        Input:
+        <output>/dated.jpg
+
+        Output:
+        <output>/<new_path>
+              /YYYY/foobar/dated.jpg
+
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+        input_folder = self.output_folder.joinpath(YEAR_SPEC).joinpath('foobar')
+        input_file = create_image_file(input_folder, DATE_SPEC)
+        self.assertTrue(input_file.exists())
+
+        cleaner = ImageClean(self.app_name, input=input_folder, output=self.output_folder,
+                             verbose=False, keep_originals=False)
+        await cleaner.run()
+        self.assertFalse(input_file.exists())
+        self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(DEFAULT_NAME).exists())
 
     @patch('pathlib.Path.home')  # Store small files separately
     async def test_use_case_5(self, home):
@@ -438,6 +465,104 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(test2.date, DATE_SPEC, "Date should exist")
         self.assertTrue(test2._metadate, "Date was internal")  # pylint: disable=protected-access
 
+    @patch('pathlib.Path.home')  # Using the check_for_folders Import
+    async def test_use_case_no_folders_a(self, home):
+        """
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder,
+                             verbose=False, keep_originals=False, check_description=False)
+
+        input_file = create_image_file(self.input_folder.joinpath('custom'), DATE_SPEC)
+
+        await cleaner.run()
+        self.assertFalse(input_file.exists())
+        self.assertFalse(self.output_folder.joinpath(YEAR_SPEC).joinpath('custom').joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(DEFAULT_NAME).exists())
+
+    @patch('builtins.print')
+    @patch('pathlib.Path.home')  # Using the check_for_folders input == output  - option is ignored
+    async def test_use_case_no_folders_b(self, home, my_print):
+        """
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+
+        cleaner = ImageClean(self.app_name, input=self.output_folder, output=self.output_folder,
+                             verbose=True, keep_originals=False, check_description=False)
+
+        input_file = create_image_file(self.output_folder.joinpath(YEAR_SPEC).joinpath('custom'), DATE_SPEC)
+        self.assertTrue(input_file.exists())
+        self.assertFalse(self.output_folder.joinpath(YEAR_SPEC).joinpath(DEFAULT_NAME).exists())
+
+        await cleaner.run()
+        self.assertTrue(input_file.exists())
+        self.assertFalse(self.output_folder.joinpath(YEAR_SPEC).joinpath(DEFAULT_NAME).exists())
+
+        found = False
+        for call_item in my_print.call_args_list:  # pragma: no cover
+            if call_item.args[0].strip() == 'Force Check for folders ON - input path and output path are the same':
+                found = True
+                break
+        self.assertTrue(found)
+
+    @patch('pathlib.Path.home')  # No folders setting on child of output
+    async def test_use_case_no_folders_c(self, home):
+        """
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+
+        input_folder = self.output_folder.joinpath(YEAR_SPEC).joinpath('custom')
+        cleaner = ImageClean(self.app_name, input=input_folder, output=self.output_folder,
+                             verbose=True, keep_originals=False, check_description=False)
+
+        other = create_file(self.output_folder.joinpath(YEAR_SPEC).joinpath('custom2'), None)
+        input_file = create_image_file(input_folder, DATE_SPEC)
+
+        await cleaner.run()
+        self.assertFalse(input_file.exists())
+        self.assertFalse(self.output_folder.joinpath(YEAR_SPEC).joinpath('custom').joinpath(DEFAULT_NAME).exists())
+        self.assertTrue(other.exists())
+        self.assertTrue(self.output_folder.joinpath(DIR_SPEC).joinpath(DEFAULT_NAME).exists())
+
+    @patch('pathlib.Path.home')  # No folders setting on child of output
+    async def test_use_case_no_folders_d(self, home):
+        """
+        input = .../output
+        output = .../output/other/folder
+
+        files = .../output/file1
+                .../output/other/folder/YEAR/custom/file2
+
+        results.
+              file1 -> DIRSPEC
+              file2 -> Untouched
+
+
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+        input_folder = self.output_folder
+        output_folder = self.output_folder.joinpath('other').joinpath('folder')
+
+        new = create_image_file(input_folder.joinpath('custom').joinpath('file1.jpg'), DATE_SPEC)
+        existing = create_image_file(output_folder.joinpath(YEAR_SPEC).joinpath('file2.jpg'), None)
+
+        cleaner = ImageClean(self.app_name, input=input_folder, output=output_folder,
+                             verbose=True, keep_originals=False, check_description=False)
+
+        await cleaner.run()
+        self.assertFalse(new.exists())
+        self.assertTrue(existing.exists())
+        self.assertTrue(output_folder.joinpath(DIR_SPEC).joinpath('file1.jpg').exists())
+
     @patch('pathlib.Path.home')  # Input image with description and no date
     async def test_use_case_10a(self, home):
         """
@@ -455,6 +580,24 @@ class ActualScenarioTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(input_file.exists())
         self.assertTrue(self.output_folder.
                         joinpath(cleaner.no_date_base).joinpath('custom').joinpath(DEFAULT_NAME).exists())
+
+    @patch('pathlib.Path.home')  # Input image with description and date
+    async def test_use_case_10a2(self, home):
+        """
+        :param home:
+        :return:
+        """
+        home.return_value = Path(self.temp_base.name)
+
+        cleaner = ImageClean(self.app_name, input=self.input_folder, output=self.output_folder,
+                             verbose=False, keep_originals=False, check_small=False)
+
+        input_file = create_image_file(self.input_folder.joinpath('custom'), DATE_SPEC)
+
+        await cleaner.run()
+        self.assertFalse(input_file.exists())
+        self.assertTrue(self.output_folder.
+                        joinpath(YEAR_SPEC).joinpath('custom').joinpath(DEFAULT_NAME).exists())
 
     @patch('pathlib.Path.home')  # Input image with description full directory date and no date
     async def test_use_case_10b(self, home):
@@ -785,7 +928,6 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(output_folder.joinpath(app.movies_base).exists(), 'Movie path does not exist')
             self.assertFalse(output_folder.joinpath(app.no_date_base).exists(), 'No_Date path does not exist')
             self.assertFalse(output_folder.joinpath(app.small_base).exists(), 'Small path does not exist')
-
 
 
 class EdgeCaseTest(unittest.IsolatedAsyncioTestCase):  # pylint: disable=too-many-instance-attributes

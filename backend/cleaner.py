@@ -4,7 +4,9 @@ Base classes for cleaning objects
 import logging
 import os
 import platform
+import platformdirs
 import re
+import stat
 
 from datetime import datetime
 from filecmp import cmp
@@ -16,10 +18,17 @@ from PIL import Image, UnidentifiedImageError
 
 import piexif
 
-if platform.system() != 'Windows':  # pragma: no cover
+try:
     import pyheif  # pylint: disable=import-outside-toplevel, import-error
+except ModuleNotFoundError:
+    pass
 
-logger = logging.getLogger('Cleaner')
+
+AUTHOR = "scott.sargent61@gmail.com"
+APPLICATION = "ImageCleaner"
+VERSION = "1.1"
+
+logger = logging.getLogger(APPLICATION)
 
 
 IMAGE_FILES = ['.JPG', '.HEIC', '.AVI', '.MP4', '.THM', '.RTF', '.PNG', '.JPEG', '.MOV', '.TIFF']
@@ -39,6 +48,23 @@ output_folders: Dict[str, FolderCT] = {}  # This is used to store output folders
 PICTURE_FILES = ['.jpg', '.jpeg', '.tiff', '.tif', '.png', '.bmp', '.heic']
 MOVIE_FILES = ['.mov', '.avi', '.mp4']
 
+
+def user_dir(appname: str = APPLICATION) -> Path:
+    user_data_dir = Path(platformdirs.user_data_dir(appname, AUTHOR, VERSION))
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    return user_data_dir
+
+
+def config_dir(appname: str = APPLICATION) -> Path:
+    config_data_dir = Path(platformdirs.user_config_dir(appname, AUTHOR, VERSION))
+    config_data_dir.mkdir(parents=True, exist_ok=True)
+    return config_data_dir
+
+
+def log_dir(appname: str = APPLICATION) -> Path:
+    log_data_dir = Path(platformdirs.user_log_dir(appname, AUTHOR, VERSION))
+    log_data_dir.mkdir(parents=True, exist_ok=True)
+    return log_data_dir
 
 def make_cleaner_object(entry: Path) -> Union[FileCT, ImageCT, FolderCT]:
     """
@@ -75,11 +101,26 @@ class CleanerBase:
     """
     A class to encapsulate the Path object that is going to be cleaned
     """
-    def __init__(self, path_entry: Path):
-        self.path = path_entry
-
-        self._date = None
+    def __init__(self, path_entry: Path, stat=None):
+        self.path: Path = path_entry
+        self.stat = None
+        try:
+            self.stat: stat = stat if stat else self.path.stat()
+        except FileNotFoundError:
+            pass
         self._metadate = False  # Is set when retrieving the date.
+
+    @property
+    def is_file(self):
+        if self.stat:
+            return stat.S_ISREG(self.stat.st_mode)
+        return False
+
+    @property
+    def is_dir(self):
+        if self.stat:
+            return stat.S_ISDIR(self.stat.st_mode)
+        return False
 
     def __eq__(self, other) -> bool:
         if self.__class__ == other.__class__:
@@ -116,7 +157,11 @@ class CleanerBase:
         """
         return the internal value for date, if one exists
         """
-        return self._date
+        return datetime.fromtimestamp(int(self.stat.st_mtime))
+
+    @property
+    def path_date(self) -> datetime:
+        return datetime.fromtimestamp(int(self.stat.st_mtime))
 
     @property
     def folder(self) -> Optional[FolderCT]:
@@ -256,10 +301,11 @@ class CleanerBase:
         dates: Dict = folder.dates if folder else None  # existing date w/description 2022/picnic
 
         for existing in self.get_registered(by_file=True):   # See if we have any duplicates of this input file.
-            folder: FolderCT = existing.folder if existing.folder else None
-            if folder and folder.description and not description:   # If this folder has a description and we don't
-                description = folder.description                    # Then use this folder's description
-                dates = folder.dates if folder.date else dates      # and this folders date if it has date
+            if self.path.stat().st_ino != existing.path.stat().st_ino :  # Skip existing data if this is self.
+                this_folder: FolderCT = existing.folder if existing.folder else None
+                if this_folder and this_folder.description and not description:   # folder has description and we don't
+                    description = this_folder.description                         # Then use this folder's description
+                    dates = this_folder.dates if this_folder.date else dates      # and this folders date if it has date
 
         if description:
             description = strip_part(description) if no_date_base != Path() else description
@@ -282,12 +328,12 @@ class CleanerBase:
                 path = Path(dates['date'].strftime('%Y'))
                 if dates['month']:
                     path = path.joinpath(dates['date'].strftime('%m'))
-                if dates['day']:
-                    path = path.joinpath(dates['date'].strftime('%d'))
+                # if dates['day']:
+                #     path = path.joinpath(dates['date'].strftime('%d'))
             elif self.date:
                 path = Path(self.date.strftime('%Y')).\
-                    joinpath(self.date.strftime('%m')).\
-                    joinpath(self.date.strftime('%d'))
+                    joinpath(self.date.strftime('%m')) #.\
+                    # joinpath(self.date.strftime('%d'))
             else:
                 path = no_date_base
 
@@ -329,14 +375,14 @@ class CleanerBase:
                 try:
                     copyfile(str(self.path), new_file)
                     copied = True
-                except PermissionError as error:  # pragma: no cover
+                except PermissionError as error:  # pragma: escape_win
                     logger.error('Can not write to %s - %s', new_path, error)
 
         if remove and copied:
             try:
                 self.de_register()
                 os.unlink(self.path)
-            except OSError as error:   # pragma: no cover
+            except OSError as error:   # pragma: escape_win
                 logger.debug('%s could not be removed (%s)', self.path, error)
 
         if copied:
@@ -384,6 +430,7 @@ class CleanerBase:
 
 class Folder(CleanerBase):
     """
+
     Structure to calculate folder data,  date values description parts
         Process the file path to glean the descriptive path parts including dates
         Result should be:          Input Examples:  (other than existing results)
@@ -396,10 +443,10 @@ class Folder(CleanerBase):
         Anything,  that is not garbage or not a number/date is removed and the path portion is returned
     """
 
-    def __init__(self, path_entry: Path, base_entry: Path, internal: bool = False, cache: bool = True):
-        super().__init__(path_entry)
+    def __init__(self, path_entry: Path, base_entry: Path, internal: bool = False, cache: bool = True, stat = None):
+        super().__init__(path_entry, stat=stat )
         self.internal = internal  # Bool to indicate this is an internal folder so no need to process it
-
+        self.score = 0
         self.dates: Dict = {
             'date': None,  # the time stamp (if any)
             'month': False,  # set to True if the date really contained a month (by default month is 1)
@@ -408,8 +455,20 @@ class Folder(CleanerBase):
         self.description: str = ''
         self.count: int = 0  # How many files in this folder
         self.children: List[FolderCT] = []  # Sub-folders.
+        self.significant_path = self.path.relative_to(base_entry)
+        self.set_date_and_description(self.significant_path)
 
-        self.set_date_and_description(self.path.relative_to(base_entry))
+        if not self.dates['date'] and self.description:
+            temp_path = Path(self.description)
+            self.description = temp_path.parts[len(temp_path.parts)-1]  # 09/2025,  no dates so take the last piece as the description
+
+            self.description = Path(self.description)
+
+        if self.dates['date']:
+            self.score = 100
+            if self.dates['month']:
+                self.score = 150
+        self.score += len(Path(self.description).parts) * 10
 
         key = self.path.as_posix()
         # May 3rd,  added and self.date to if.
@@ -459,7 +518,6 @@ class Folder(CleanerBase):
         path = Path(path_string)
         for part in path.parts:
             if part != '.' and not (len(part) == 22 and part.find(' ') == -1):
-
                 try:
                     int(CLEAN.sub('', part.rstrip()))
                 except ValueError:
@@ -525,6 +583,9 @@ class FileCleaner(CleanerBase):
     A class to encapsulate the regular file Path object that is going to be cleaned
     """
 
+    def __init__(self, path_entry: Path, stat = None):
+        super().__init__(path_entry, stat=stat )
+
     def __lt__(self, other):  # pragma: no cover
         if self == other:  # Our files are the same
             return self.date < other.date
@@ -569,8 +630,8 @@ class ImageCleaner(CleanerBase):
     CONVERSION_SUFFIX = ['.'
                          'HEIC', ]
 
-    def __init__(self, path_entry: Path):
-        super().__init__(path_entry)
+    def __init__(self, path_entry: Path, stat = None):
+        super().__init__(path_entry, stat=stat)
 
         self._image = None
         self._image_data = []
@@ -752,7 +813,7 @@ class ImageCleaner(CleanerBase):
         if platform.system() == 'Windows':
             # This option is not supported via GUI so no one should see this logger.error
             logger.error('Conversion from HEIC is not supported on Windows')
-        else:  # pragma: no cover
+        else:  # pragma: no-pyheif
             original_name = self.path
             new_name = work_dir.joinpath(f'{self.path.stem}.jpg')
 

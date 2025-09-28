@@ -5,10 +5,10 @@ block_cipher = None
 
 
 a = Analysis(
-    ['image_cleaner.py', 'backend/cleaner.py', 'backend/image_clean.py'],
+    ['cmdline.py', 'backend/cleaner.py', 'backend/image_clean.py'],
     pathex=[],
     binaries=[],
-    datas=[('imageclean.kv', '.'), ('backend', 'backend')],
+    datas=[('backend', 'backend'),],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -28,8 +28,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='cleaner_cron',
-    debug=False,
+    name='imerge',
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,

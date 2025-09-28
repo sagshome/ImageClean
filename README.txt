@@ -1,5 +1,8 @@
 Readme
 
+from shell
+python Utilities/build/build.py --force
+
 Notes April 25/May 1st 2023
     We need to simplify this.
     System Folders

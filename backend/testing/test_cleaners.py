@@ -503,7 +503,6 @@ class ImageCleanerTests(Cleaners):
 
     def test_convert_defaults(self):
         if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
-
             with self.assertLogs('Cleaner', level='DEBUG') as logs:
                 new_obj = self.heic_obj.convert(self.run_base, self.migration_base.joinpath('heic'))  # Default  remove=True
                 self.assertTrue(logs.output[len(logs.output) - 1].startswith('DEBUG:Cleaner:Will not copy to myself'))
@@ -516,7 +515,6 @@ class ImageCleanerTests(Cleaners):
 
     def test_convert_no_migrate_inplace(self):
         if platform.system() not in ['win32', 'Windows']:  # pragma: no cover
-
             new_obj = self.heic_obj.convert(self.run_base, None, remove=True)  # Default  remove=True
 
             self.assertNotEqual(self.heic_obj, new_obj)

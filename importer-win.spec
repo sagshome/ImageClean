@@ -9,7 +9,7 @@ a = Analysis(
     ['ImageCleanUI.py', 'backend/cleaner.py', 'backend/image_clean.py'],
     pathex=[],
     binaries=[],
-    datas=[('imageclean.kv', '.'), ('backend', 'backend')],
+    datas=[('photomanager.kv', '.'), ('backend', 'backend')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

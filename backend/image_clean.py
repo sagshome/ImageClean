@@ -1,5 +1,11 @@
 """
 Run the actual image cleaning
+09-2025 - Change of strategy.   Only valid base folders are:
+    YYYY/<descriptions...></Movies | Small | <image_name_Similar (which should include image_name (A separate process))>
+    YYYY/MM/<descriptions...></Movies | Small | <image_name_Similar (which should include image_name (A separate process))>
+    NoDate/<descriptions...></Movies | Small | <image_name_Similar (which should include image_name (A separate process))>
+
+    Using new imagehash to find actual duplicates,  same hash pick the largest file,  I should have more metadata
 """
 import asyncio
 
@@ -14,8 +20,9 @@ from pathlib import Path
 from typing import Union, Dict, TypeVar
 
 sys.path.append('.')
+
 # pylint: disable=import-error wrong-import-position
-from backend.cleaner import ImageCleaner, FileCleaner, Folder, make_cleaner_object, PICTURE_FILES, MOVIE_FILES
+from backend.cleaner import ImageCleaner, FileCleaner, Folder, make_cleaner_object, PICTURE_FILES, MOVIE_FILES, AUTHOR, config_dir, log_dir, user_dir
 
 logger = logging.getLogger('Cleaner')  # pylint: disable=invalid-name
 
@@ -30,7 +37,7 @@ GREATER: int = 1
 LESSER: int = 2
 
 WARNING_FOLDER_SIZE = 100  # Used when auditing directories,  move then 100 members is a Yellow flag
-MAXIMUM_FOLDER_SIZE = 50  # Date based folder,  more than MAX,  create a child
+MAXIMUM_FOLDER_SIZE = 50  # todo: Date based folder,  more than MAX,  create a child
 
 DF = TypeVar("DF", bound="Folder")  # pylint: disable=invalid-name
 
@@ -38,13 +45,13 @@ DF = TypeVar("DF", bound="Folder")  # pylint: disable=invalid-name
 class ImageClean:  # pylint: disable=too-many-instance-attributes
     """
     This is the main class for image import,   create an instance,  and then .run it
+    used by both the cmdline and the GUI(s)
     """
     def __init__(self, app, restore=False, **kwargs):
+
+        self.run_path = user_dir(app)
+        self.conf_file = config_dir(app).joinpath('config.pickle')
         self.app_name = app
-        self.run_path = Path(Path.home().joinpath(f'.{self.app_name}'))
-        if not self.run_path.exists():
-            os.makedirs(self.run_path, mode=511)
-        self.conf_file = self.run_path.joinpath('config.pickle')
 
         # Default option
         self.verbose = False
@@ -52,9 +59,17 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         self.keep_original_files = True
         self.check_for_small = False
         self.check_for_folders = True  # When set,  check for descriptive folder names, else just use dates.
+        '''
+        Use case 1) Input != Output -> skip the description on input folder, but still honour output description if any
+        Use case 2) Input == Output -> this option is harmful,  do not allow it
+        Use Case 3) Input folder is child of Output folder (skip this description if it is registered
+            ex 1 input folder = /home/sargent/pictures/stuff   output = /home/sargent/pictures
+        Use Case 4) Input folder is parent of output folder
+            ex input folder = /home/sargent   output = /home/sargent/pictures
+                expect all the files/folders up to /home/sargent/pictures to be processed
+        '''
 
         # Default values
-        self.input_folder = self.output_folder = Path.home()
         self.progress = 0
         self.force_keep = False  # With R/O directories we can not ever try and remove anything
 
@@ -64,15 +79,16 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                     temp = pickle.load(file)
                     self.process_args(temp)
             except FileNotFoundError:
-                logger.debug('Restore attempt of %s failed', self.conf_file)
+                logger.error('Restore attempt of %s failed', self.conf_file)
+                self.process_args(kwargs)
         else:  # Used by cmdline
             self.process_args(kwargs)
 
-        self.duplicate_base = f'{self.app_name}_Duplicates'
-        self.movies_base = f'{self.app_name}_ImageMovies'
-        self.migration_base = f'{self.app_name}_Migrated'
-        self.no_date_base = f'{self.app_name}_NoDate'
-        self.small_base = f'{self.app_name}_Small'
+        self.duplicate_base = 'Cleaner_Duplicates'
+        self.movies_base = 'Cleaner_ImageMovies'
+        self.migration_base = 'Cleaner_Migrated'
+        self.no_date_base = 'Cleaner_NoDate'
+        self.small_base = 'Cleaner_Small'
 
         self.folders: Dict[str, DF] = {}  # This is used to store output folders - one to one map to folder object
         self.movie_list = []  # We need to track these so we can clean up
@@ -97,12 +113,11 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
                 self.keep_original_files = kwargs[key]
             elif key == 'check_small':
                 self.check_for_small = kwargs[key]
-            # elif key == 'check_description':
-            #    self.check_for_folders = kwargs[key]
+            elif key == 'check_description':
+                self.check_for_folders = kwargs[key]
             else:  # pragma: no cover
                 error_str = 'Argument:%s is being skipped failed', key
                 logger.debug(error_str)
-                # assert False, error_str
 
     def save_config(self):  # pragma: no cover
         """
@@ -149,6 +164,11 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         if not os.access(self.input_folder, os.W_OK | os.X_OK):
             self.force_keep = True  # pragma: no cover
 
+        if self.input_folder == self.output_folder and (not self.check_for_folders):
+            self.check_for_folders = True
+            self.print('Force Check for folders ON - input path and output path are the same')
+
+        Folder.clear_caches()  # Clears both the output caches - they should be empty unless this is a re-run
         # Register our internal folders
         Folder(self.output_folder, self.output_folder, internal=True)
         Folder(self.output_folder.joinpath(self.no_date_base), self.output_folder, internal=True)
@@ -255,7 +275,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         if self.check_for_small and entry.is_small:
             decorator = self.small_base  # Assumption is that movies can not be small
 
-        # Folder base is calculated to be the proper location for this entry
+        # Folder base is calculated to be the best proper location for this entry
         folder_base = entry.folder_base2(input_folder=folder, no_date_base=Path(self.no_date_base))
         relo_path = self.output_folder.joinpath(decorator).joinpath(folder_base)
 
@@ -272,7 +292,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         if entry.is_registered(by_file=True):  # A copy of me lives elsewhere.    Let's examine it
             for existing in entry.get_registered(by_file=True):
                 if (not existing.folder) or (existing.folder and (not existing.folder.description)):
-                    if existing.path.stat().st_ino != entry.path.stat().st_ino:  # Prevent moving myself to duplicate
+                    if entry.path.stat().st_ino != existing.path.stat().st_ino:  # Prevent moving myself to duplicate
                         base = existing.folder_base2(no_date_base=Path(self.no_date_base))
                         dup_folder = self.output_folder.joinpath(self.duplicate_base).joinpath(decorator).joinpath(base)
                         existing.de_register()
@@ -292,7 +312,7 @@ class ImageClean:  # pylint: disable=too-many-instance-attributes
         """
         self.print(f'Scanning Folder: {folder}')
         this_folder = Folder(folder, self.input_folder, cache=False)
-        if folder == self.output_folder.joinpath(self.no_date_base):
+        if folder == self.output_folder.joinpath(self.no_date_base) or (not self.check_for_folders):
             this_folder.description = ''  # This is a special case where we are reimporting ourselves
 
         for entry in folder.iterdir():

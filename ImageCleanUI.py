@@ -30,7 +30,7 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 from kivy.core.window import Window
 
-sys.path.append('.')
+sys.path.append('.') # required to satisfy imports of backend
 from backend.cleaner import FileCleaner, Folder  # pylint: disable=import-error
 from backend.image_clean import ImageClean  # pylint: disable=import-error
 
@@ -107,7 +107,7 @@ def calculate_size(path, which):
     which.value = -1  # -1 is a test for uninitialized
     value = 0
     for base, dirs, files in os.walk(path):
-        if not Folder.is_internal(base):
+        if not Folder.is_internal(Path(base)):
         # if Path(base) not in cleaner_app.ignore_folders:
             for _ in files:
                 value += 1
@@ -209,13 +209,7 @@ class CheckBoxItem(BoxLayout):
     @staticmethod
     def value_keep_originals():
         return cleaner_app.keep_original_files
-    #@staticmethod
-    #def set_process_duplicates(touch):
-    #    cleaner_app.check_for_duplicates = touch
 
-    #@staticmethod
-    #def value_process_duplicates():
-    #    return cleaner_app.check_for_duplicates
     @staticmethod
     def set_process_small(touch):
         cleaner_app.check_for_small = touch
@@ -239,8 +233,11 @@ class CheckBoxItem(BoxLayout):
     @staticmethod
     def value_set_folders():
         return cleaner_app.check_for_folders
+
+
 class Options(BoxLayout):
     pass
+
 
 class RadioBoxItem(BoxLayout):
     """
@@ -353,7 +350,6 @@ class Progress(BoxLayout):
             self.progress_text.text += f"\n\n\n Full Results can be found in: {RESULTS.name}\n"
             self.parent.remove_widget(self.parent.children[0])
             self.parent.add_widget(ExitBox())
-
 
     def start_application(self):
 
@@ -522,21 +518,19 @@ class Main(FloatLayout):
     def help():
         dismiss_dialog(
             'Help',
-           "Photo Manager: Organize images based on dates and custom folder names.  The date format is:\n"
-           "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/5 (December 5th, 2002)\n"
-           "    Times are based off 1) internal image time,  2) a existing directory with date values.\n"
-           "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n\n"
-           "This structure should help you find your images much easier\n\n"
-           "'Import Images From' is where the images will be loaded from\n"
-           "'Save Images To' is where they will be stored - it can be the same as the From folder\n\n"
-           "Options\n"
-           "Keep Originals      - If selected no changes to Import From,  usually files are copied and deleted. \n"
-           "Look for Duplicates - Files with similar names, but in different folders are checked and if\n "
-           "they are the same,  the copy is moved to duplicates folder. On large output folders this can take a while.\n"
-           "Look for Thumbnails - Isolate images that are very small (Often created by other importing software)\n"
-           "Convert HEIC files  - Look for this format and if found convert to JPEG (HIEC are only display on Apple devices\n"
-           "Preserve Folders    - On Image Import, check for descriptive folders. If not selected all files are store by date only\n"
-                       )
+            "\nPhoto Manager: Organize images based on dates and custom folder names.  The date format is:\n\n"
+            "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/05 (December 5th, 2002)\n"
+            "    Times are based off 1) internal image time,  2) a existing directory with date values.\n"
+            "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n\n"
+            "This structure should help you find your images much easier\n\n"
+            "'Import Images From' is where the images will be loaded from\n"
+            "'Save Images To' is where they will be stored - it can be the same as the From folder\n\n"
+            "Options\n\n"
+            "Keep Originals:        If selected no changes to Import From,  usually files are copied and deleted. \n"
+            "Look for Thumbnails:   Isolate images that are very small (Often created by other importing software)\n"
+            "Convert HEIC files:    Look for this format and if found convert to JPEG (HIEC are only display on Apple devices\n"
+            "Preserve Folders:      On Image Import, check for descriptive folders. If not selected all files are store by date only\n"
+        )
 
     @staticmethod
     def about():
@@ -566,7 +560,7 @@ class Main(FloatLayout):
         sys.exit(value)
 
 
-class ImageCleanApp(App):
+class PhotoManagerApp(App):
     """
     Main App
     """
@@ -592,5 +586,5 @@ class ImageCleanApp(App):
 if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(ImageCleanApp().app_func())
+    loop.run_until_complete(PhotoManagerApp().app_func())
     loop.close()

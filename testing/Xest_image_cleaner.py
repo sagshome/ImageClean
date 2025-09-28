@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from image_cleaner import main
+from cmdline import main
 
 
 class ActualScenarioTest(unittest.TestCase):

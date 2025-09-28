@@ -2,10 +2,9 @@
 Command line call for Cleaning
 
 Goals.
-1. Convert HEIC files to JPG  - Only if requested and only if on Linux systems
-    (macs support them,  windows can't process them)
-2. Any root folder file should move into a dated folder YEAR/MON/DATE
-3. SubFolders,  with a 'dated parent' should be imported with that date.  2002-02-02 Picnic / swimming / img01.jpg
+1. Convert HEIC files to JPG  - Only if requested and only if on Linux systems (macs support them,  windows can't process them)
+2. Any root folder file should move into a dated directory YYYY/MM
+# 3. SubDirectories,  with a 'dated parent' should be imported with that date.  2002-02-02 Picnic / swimming / img01.jpg
 3. Any file without date info and not in a dated parent,  moves into - no date folder
 5. no date folder is always processed incase I set the date.
 4. garbage is ignored
@@ -16,35 +15,42 @@ import asyncio
 import getopt
 import logging
 import os
+import platformdirs
 import sys
 
 from datetime import datetime
 from pathlib import Path
 
 sys.path.append('.')  # required to satisfy imports of backend
-from backend.cleaner import FileCleaner  # pylint: disable=wrong-import-position import-error
+
+from backend.cleaner import FileCleaner, AUTHOR, VERSION # pylint: disable=wrong-import-position import-error
 from backend.image_clean import ImageClean  # pylint: disable=wrong-import-position import-error
 
+app_name = 'imerge'  # from cleaner_cron.spec
 
-APP_PATH: Path = Path(sys.argv[0])
-APP_NAME: str = APP_PATH.stem
+user_data_dir = Path(platformdirs.user_data_dir(app_name, AUTHOR, VERSION))
+user_data_dir.mkdir(parents=True, exist_ok=True)
+config_data_dir = Path(platformdirs.user_config_dir(app_name, AUTHOR, VERSION))
+config_data_dir.mkdir(parents=True, exist_ok=True)
+log_data_dir = Path(platformdirs.user_log_dir(app_name, AUTHOR, VERSION))
+log_data_dir.mkdir(parents=True, exist_ok=True)
 
-LOGGER_NAME: str = 'Cleaner'  # I am hard-coding this value. I call it from cmdline and UI which have diff app names
-#  APP = ImageClean(LOGGER_NAME)  # Sets all default values
+run_path = user_data_dir
+conf_file = config_data_dir.joinpath('config.pickle')
+log_file = log_data_dir.joinpath(f'{app_name}.log')
 
 
-log_file = Path.home().joinpath(f'{LOGGER_NAME}.log')  # pylint: disable=invalid-name
 if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
     FileCleaner.rollover_file(log_file)
 
-logger = logging.getLogger(LOGGER_NAME)  # pylint: disable=invalid-name
+logger = logging.getLogger(app_name)  # pylint: disable=invalid-name
 
 FH = logging.FileHandler(filename=log_file)
 FH_FORMATTER = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
 FH.setFormatter(FH_FORMATTER)
 logger.addHandler(FH)  # pylint: disable=invalid-name
 
-if os.getenv(f'{LOGGER_NAME.upper()}_DEBUG'):  # pragma: no cover
+if os.getenv(f'{app_name.upper()}_DEBUG'):  # pragma: no cover
     # pylint: disable=invalid-name
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
@@ -59,7 +65,7 @@ def short_help() -> str:
     Build short help
     :return:
     """
-    return f'{APP_NAME} -hcrdsv -i <import_folder> image_folder\n' \
+    return f'{app_name} -hcrsv -i <import_folder> image_folder\n' \
            '\n\n-h: This help' \
            '\nThis application will reorganize image files into a folder structure that is human friendly' \
            '\nGo to https://github.com/sagshome/ImageClean/wiki for details'
@@ -75,7 +81,6 @@ def app_help(app: ImageClean) -> str:  # pragma: no cover
            '\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the' \
            f'"{app.migration_base}" folder' \
            '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed' \
-           '\n-d: Process Duplicates. look for and exact files in duplicate directories - and pick the best' \
            f'\n-s: Check for small files (save in "{app.small_base}" folder) - This WILL slow down processing' \
            '\n-v: Verbose,  blather on to the terminal' \
            '\n-i import folder - where we are importing from (default is just process image_folder)' \
@@ -125,8 +130,6 @@ def main(arg_strings=None) -> ImageClean:
             options['keep_originals'] = False
         elif opt == '-s':
             options['check_small'] = True
-        elif opt == '-d':
-            options['check_duplicates'] = True
         elif opt == '-v':
             options['verbose'] = True
         elif opt == '-i':
@@ -140,7 +143,7 @@ def main(arg_strings=None) -> ImageClean:
     if 'input' not in options:
         options['input'] = options['output']
 
-    return ImageClean(APP_NAME, restore=False, **options)
+    return ImageClean(app_name, restore=False, **options)
 
 
 if __name__ == '__main__':  # pragma: no cover

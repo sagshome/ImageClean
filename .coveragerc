@@ -1,6 +1,15 @@
 # .coveragerc to control coverage.py
+
 [coverage:run]
 branch = False
+plugins =
+  coverage_conditional_plugin
+
+[coverage:coverage_conditional_plugin]
+rules =
+  "platform_system == 'Windows'": escape_win
+  "not is_installed('pyheif')": no-pyheif
+
 
 [report]
 # Regexes for lines to exclude from consideration

@@ -176,31 +176,25 @@
         CheckBoxItem:
             id: cb_keep
             size_hint_y: .15
-            text: "Keep Originals - Don't remove original files!"
+            text: "Keep all originals Files"
             check_value: self.value_keep_originals()
             callback: self.set_keep_originals
         CheckBoxItem:
-            id: cb_dups
-            size_hint_y: .15
-            text: "Look for Duplicates - Slower Processing but check for duplicate files!"
-            #check_value: self.value_process_duplicates()
-            #callback: self.set_process_duplicates
-        CheckBoxItem:
             id: cb_small
             size_hint_y: .15
-            text: "Look for Thumbnails - If you find tiny images,  moved them to a 'small' folder!"
+            text: "Look for thumbnails - If you find tiny images,  moved them to a dedicated 'small' folder!"
             check_value: self.value_process_small()
             callback: self.set_process_small
         CheckBoxItem:
             id: cb_convert
             size_hint_y: .15
-            text: "Convert HEIC files - Convert proprietary apple format to JPEG!"
+            text: "Convert HEIC files - Convert proprietary apple format to JPEG (option ignored on Windows Systems)"
             check_value: self.value_do_convert()
             callback: self.set_do_convert
         CheckBoxItem:
             id: import_folders
             size_hint_y: .15
-            text: "Preserve Folders - On image import, check for descriptive folder names"
+            text: "Preserve folders names - On image import, check for descriptive folder names vs just using dates"
             check_value: self.value_set_folders()
             callback: self.set_check_folders
 
