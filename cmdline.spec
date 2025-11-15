@@ -1,34 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
-block_cipher = None
-
-
 a = Analysis(
-    ['cmdline.py', 'ImageClean.py', 'CleanerBase.py', 'StandardFile.py', 'ImageFile.py', 'Folder.py' ],
+    ['cmdline.py'],
     pathex=[],
     binaries=[],
-    # datas=[('backend', 'backend'),],
-    hiddenimports=[],  # Add your modules here
+    datas=[],
+    hiddenimports=['CleanerBase'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
     a.datas,
     [],
-    name='cleaner',
+    name='cmdline',
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,

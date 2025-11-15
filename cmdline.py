@@ -10,81 +10,45 @@ Goals.
 4. garbage is ignored
 5. Clean up duplicates
 """
-# pylint: disable=line-too-long
+import argparse
 import asyncio
-import getopt
+
 import logging
 import os
-import platformdirs
 import sys
-
 from datetime import datetime
-from pathlib import Path
 
 sys.path.append('.')  # required to satisfy imports of backend
 
-from backend.cleaner import FileCleaner, AUTHOR, VERSION # pylint: disable=wrong-import-position import-error
-from backend.image_clean import ImageClean  # pylint: disable=wrong-import-position import-error
-
-app_name = 'imerge'  # from cleaner_cron.spec
-
-user_data_dir = Path(platformdirs.user_data_dir(app_name, AUTHOR, VERSION))
-user_data_dir.mkdir(parents=True, exist_ok=True)
-config_data_dir = Path(platformdirs.user_config_dir(app_name, AUTHOR, VERSION))
-config_data_dir.mkdir(parents=True, exist_ok=True)
-log_data_dir = Path(platformdirs.user_log_dir(app_name, AUTHOR, VERSION))
-log_data_dir.mkdir(parents=True, exist_ok=True)
-
-run_path = user_data_dir
-conf_file = config_data_dir.joinpath('config.pickle')
-log_file = log_data_dir.joinpath(f'{app_name}.log')
+from CleanerBase import APPLICATION, config_dir, user_dir, log_dir
+from StandardFile import StandardFile
+from ImageClean import ImageClean  # DESCRIPTION, EXTRA_HELP
 
 
-if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
-    FileCleaner.rollover_file(log_file)
+DESCRIPTION = 'This application will reorganize image/data files into a folder structure that is human friendly'
+EXTRA_HELP = 'Go to https://github.com/sagshome/ImageClean/wiki for details'
 
-logger = logging.getLogger(app_name)  # pylint: disable=invalid-name
+run_path = user_dir()
+conf_file = config_dir().joinpath('config.pickle')
+log_file = log_dir().joinpath(f'{APPLICATION}.log')
+
+if log_file.exists() and os.stat(log_file).st_size > 100000:
+    StandardFile.rollover_file(log_file, max_copies=5)
+
+logger = logging.getLogger(APPLICATION)
 
 FH = logging.FileHandler(filename=log_file)
 FH_FORMATTER = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
 FH.setFormatter(FH_FORMATTER)
-logger.addHandler(FH)  # pylint: disable=invalid-name
+logger.addHandler(FH)
 
-if os.getenv(f'{app_name.upper()}_DEBUG'):  # pragma: no cover
-    # pylint: disable=invalid-name
+if os.getenv(f'{APPLICATION.upper()}_DEBUG'):
     logger.setLevel(level=logging.DEBUG)
     oh = logging.StreamHandler()
     oh.setFormatter(FH_FORMATTER)
     logger.addHandler(oh)
 else:
     logger.setLevel(level=logging.ERROR)
-
-
-def short_help() -> str:
-    """
-    Build short help
-    :return:
-    """
-    return f'{app_name} -hcrsv -i <import_folder> image_folder\n' \
-           '\n\n-h: This help' \
-           '\nThis application will reorganize image files into a folder structure that is human friendly' \
-           '\nGo to https://github.com/sagshome/ImageClean/wiki for details'
-
-
-def app_help(app: ImageClean) -> str:  # pragma: no cover
-    """
-    Build help text
-    :param app:
-    :return:
-    """
-    return f'{short_help()}' \
-           '\n\n-c: Converted (HEIC) files to JPG files. The original HEIC files are saved into the' \
-           f'"{app.migration_base}" folder' \
-           '\n-r: Remove imported files. if the file is imported successfully,  the original file is removed' \
-           f'\n-s: Check for small files (save in "{app.small_base}" folder) - This WILL slow down processing' \
-           '\n-v: Verbose,  blather on to the terminal' \
-           '\n-i import folder - where we are importing from (default is just process image_folder)' \
-           '\n\nimage folder - where to image files are saved'
 
 
 async def run(app):  # pragma: no cover
@@ -95,55 +59,35 @@ async def run(app):  # pragma: no cover
     await app.run()
 
 
-def main(arg_strings=None) -> ImageClean:
+def main() -> ImageClean:
     """
     Main program
-    :param arg_strings: sys.argv
     :return: None
     """
-    try:
-        opts, args = getopt.getopt(arg_strings[1:], 'hcrsdvi:', [])
-    except getopt.GetoptError:
-        print(f'Invalid syntax: {sys.argv[1:]}\n\n')
-        print(short_help())
-        sys.exit(4)
+    cmdline_parser = argparse.ArgumentParser(
+        prog=APPLICATION,
+        description=DESCRIPTION,
+        epilog=EXTRA_HELP)
 
-    if len(args) != 1:
-        print('\nimage folder is required.\n\n')
-        print(short_help())
-        sys.exit(2)
+    cmdline_parser.add_argument('input_folder')
+    cmdline_parser.add_argument('output_folder')
+    cmdline_parser.add_argument('-v', '--verbose', action='store_true', help='Send a lot of output to the screen')
+    cmdline_parser.add_argument('-r', '--remove', action='store_true', help=' files after the import (even if skipped)')
+    cmdline_parser.add_argument('-c', '--convert', action='store_true', help='Change HEIC files to JPEG format')
 
-    options = {'output': Path(args[0]),
-               'do_convert': False,
-               'keep_originals': True,
-               'verbose': False,
-               'check_small': False,
-               'check_duplicates': False}
+    cmdline_parser.add_argument('-s', '--small', action='store_true', help="Store very small images, in a directory named 'small'")
+    cmdline_parser.add_argument('-d', '--data', action='store_true',
+                                help="Also process files that are not images,  they will be stored under 'output_folder' with the prefix 'data'")
+    cmdline_parser.add_argument('-f', '--fix_date', action='store_true',
+                                help='When processing an image without an internal datestamp,  set it based on file datestamp')
+    cmdline_parser.add_argument('-m', '--match_date', action='store_true',
+                                help="When processing an image, set the file datestamp based on the internal image datestamp")
 
-    for opt, arg in opts:  # pragma: no cover
-        if opt == '-h':
-            print(app_help)
-            sys.exit(2)
-        elif opt == '-c':
-            options['do_convert'] = True
-        elif opt == '-r':
-            options['keep_originals'] = False
-        elif opt == '-s':
-            options['check_small'] = True
-        elif opt == '-v':
-            options['verbose'] = True
-        elif opt == '-i':
-            try:
-                os.stat(arg)
-            except FileNotFoundError:
-                print(f'Import Folder: {arg} is not found.   Critical error \n\n {short_help()}')
-                sys.exit(3)
-            options['input'] = Path(arg)
-
-    if 'input' not in options:
-        options['input'] = options['output']
-
-    return ImageClean(app_name, restore=False, **options)
+    args = cmdline_parser.parse_args()
+    args_dict = vars(args)
+    args_dict['restore'] = False
+    logger.debug('%s' % args_dict)
+    return ImageClean(**args_dict)
 
 
 if __name__ == '__main__':  # pragma: no cover
@@ -151,10 +95,12 @@ if __name__ == '__main__':  # pragma: no cover
 
     logger.debug('Starting (%s - %s)', datetime.now(), start_time)
 
-    the_app = main(sys.argv)
+    the_app = main()
+    if not the_app.setup():
+        exit(1)
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(run(the_app))
-    loop.close()
-
+    # Start it up.
+    the_app.print('Starting Imports.')
+    asyncio.run(the_app.import_from_cache())
+    the_app.teardown()
     logger.debug('Completed (%s - %s)', datetime.now(), start_time)

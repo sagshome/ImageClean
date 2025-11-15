@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import platform
+import platformdirs
 import sys
 import types
 
@@ -31,22 +32,32 @@ from kivy.uix.widget import Widget
 from kivy.core.window import Window
 
 sys.path.append('.') # required to satisfy imports of backend
-from backend.cleaner import FileCleaner, Folder  # pylint: disable=import-error
-from backend.image_clean import ImageClean  # pylint: disable=import-error
+from backend.cleaner import FileCleaner, Folder, APPLICATION, AUTHOR, VERSION  # pylint: disable=import-error
+from ImageClean import ImageClean  # pylint: disable=import-error
 
 if platform.system() == 'Windows':
     import win32timezone
 
-application_name = 'Cleaner'  # I am hard-coding this value since I call it from cmdline and UI which have diff names
 Window.size = (1000, 600)
 
-app_path = Path(sys.argv[0])
-run_path = Path(Path.home().joinpath(f'.{application_name}'))
+user_data_dir = Path(platformdirs.user_data_dir(APPLICATION, AUTHOR, VERSION))
+user_data_dir.mkdir(parents=True, exist_ok=True)
+config_data_dir = Path(platformdirs.user_config_dir(APPLICATION, AUTHOR, VERSION))
+config_data_dir.mkdir(parents=True, exist_ok=True)
+log_data_dir = Path(platformdirs.user_log_dir(APPLICATION, AUTHOR, VERSION))
+log_data_dir.mkdir(parents=True, exist_ok=True)
+
+run_path = user_data_dir
+conf_file = config_data_dir.joinpath('config.pickle')
+log_file = log_data_dir.joinpath(f'{APPLICATION}.log')
+
 if not run_path.exists():
     os.mkdir(run_path)
 
-log_file = run_path.joinpath('logfile')
-results_file = run_path.joinpath(f'{application_name}.results')
+if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
+    FileCleaner.rollover_file(log_file)
+
+results_file = run_path.joinpath(f'{APPLICATION}.results')
 
 if results_file.exists():
     results_file.unlink()
@@ -57,8 +68,8 @@ RESULTS = open(results_file, "w+")  # pylint: disable=consider-using-with
 if log_file.exists() and os.stat(log_file).st_size > 100000:
     FileCleaner.rollover_file(log_file)
 
-debugging = os.getenv(f'{application_name.upper()}_DEBUG')
-logger = logging.getLogger(application_name)
+debugging = os.getenv(f'{APPLICATION.upper()}_DEBUG')
+logger = logging.getLogger(APPLICATION)
 
 fh = logging.FileHandler(filename=str(log_file))
 fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
@@ -67,7 +78,7 @@ logger.addHandler(fh)
 
 
 # The App will run in the background,  value and queue are used for some basic info passing
-cleaner_app = ImageClean(application_name, restore=True)  # save options over each run
+cleaner_app = ImageClean(restore=True, parallel=True)  # save options over each run
 mp_processed_value = Value("i", 0)
 mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
@@ -220,11 +231,11 @@ class CheckBoxItem(BoxLayout):
 
     @staticmethod
     def set_do_convert(touch):
-        cleaner_app.do_convert = touch
+        cleaner_app.convert = touch
 
     @staticmethod
     def value_do_convert():
-        return cleaner_app.do_convert
+        return cleaner_app.convert
 
     @staticmethod
     def set_check_folders(touch):
@@ -378,7 +389,8 @@ class Progress(BoxLayout):
         :param text:  (what we want to display)
         :return:
         """
-        mp_print_queue.put(f'{datetime.now()}:{text}')
+        if text:  # Don't bother printing empty lines of text
+            mp_print_queue.put(f'{datetime.now()}:{text}')
 
     @staticmethod
     def override_progress(_):
@@ -519,16 +531,16 @@ class Main(FloatLayout):
         dismiss_dialog(
             'Help',
             "\nPhoto Manager: Organize images based on dates and custom folder names.  The date format is:\n\n"
-            "  * Level 1 - Year,  Level 2 - Month,  Level 3 - Date as in 2002/12/05 (December 5th, 2002)\n"
-            "    Times are based off 1) internal image time,  2) a existing directory with date values.\n"
-            "  * If the original folder had a name like 'Florida',  the new folder would be 2002/Florida\n\n"
+            "  * Level 1 - Year,  Level 2 - Month as in 2002/12 (December 5th, 2002)\n"
+            "    Times are based off of 1) a existing directory with date values, 2) internal image time, 3) file time stamp\n"
+            "  * If the original folder had a name like 'Florida',  the new folder would be 2002/12/Florida\n\n"
             "This structure should help you find your images much easier\n\n"
             "'Import Images From' is where the images will be loaded from\n"
             "'Save Images To' is where they will be stored - it can be the same as the From folder\n\n"
             "Options\n\n"
             "Keep Originals:        If selected no changes to Import From,  usually files are copied and deleted. \n"
             "Look for Thumbnails:   Isolate images that are very small (Often created by other importing software)\n"
-            "Convert HEIC files:    Look for this format and if found convert to JPEG (HIEC are only display on Apple devices\n"
+            "Convert HEIC files:    Look for this format and if found convert to JPEG (HIEC are not displayed on Windows devices\n"
             "Preserve Folders:      On Image Import, check for descriptive folders. If not selected all files are store by date only\n"
         )
 

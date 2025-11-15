@@ -3,6 +3,12 @@ Readme
 from shell
 python Utilities/build/build.py --force
 
+Notes October 11 2025
+    Rollover Use Case
+         file.jpg exists in folder 2020/09 and we have another file named file.jpg that needs to move there.  They are differant sized files.   I can easily do
+         a rollover.  Next time I import that same directory I can not allow for another rollover.
+         - I could enforce a file comparison on "like" files where like is the lowercase name before a "_/n" pattern.
+
 Notes April 25/May 1st 2023
     We need to simplify this.
     System Folders

@@ -878,7 +878,7 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
             app.input_folder = Path('/input')
             app.output_folder = Path('/output')
             app.verbose = True
-            app.do_convert = False
+            app.convert = False
             app.keep_original_files = False
 
             app.save_config()
@@ -888,7 +888,7 @@ class InitTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(app.input_folder, Path('/input'))
         self.assertEqual(app.output_folder, Path('/output'))
         self.assertTrue(app.verbose, "Verbose is not True")
-        self.assertFalse(app.do_convert, "Conversion are not True")
+        self.assertFalse(app.convert, "Conversion are not True")
         self.assertFalse(app.keep_original_files, "Keep original default is not True")
         app.teardown()
 
