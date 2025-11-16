@@ -2,19 +2,15 @@ from pathlib import Path
 import hashlib
 from datetime import datetime
 import os
-from typing import Dict
 
 import typer
-from typing_extensions import Annotated
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, BigInteger, Text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from platformdirs import user_data_dir
 
 from PIL import Image
 import imagehash
-import cProfile
 
 from models import FileMeta, Base, FileData
 app = typer.Typer()
@@ -114,7 +110,7 @@ def test_all_folders(root: Path, follow_symlinks: bool = False):
 
 
 
-import os, sys
+import os
 from stat import *
 
 def walktree(top, base, callback):
@@ -143,7 +139,7 @@ def visitfile(file):
 
 
 def test_all_files(root: Path, follow_symlinks: bool = False):
-    from cleaner import Folder
+    from backend.cleaner import Folder
     folders = {}  # Dictionary of path parts
     for file in root.rglob("*"):
         if file.is_symlink() and not follow_symlinks:

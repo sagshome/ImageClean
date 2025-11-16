@@ -7,16 +7,12 @@ import sys
 from datetime import datetime
 from PIL import Image, UnidentifiedImageError
 from pathlib import Path
-import pyheif
 
-
-sys.path.append('.')  # required to satisfy imports of backend
-
-#try:
-#    import pyheif  # pylint: disable=import-outside-toplevel, import-error
-#    pass
-#except ModuleNotFoundError:
-#    pass
+try:
+    import pyheif  # pylint: disable=import-outside-toplevel, import-error
+    pass
+except ModuleNotFoundError:
+    pass
 
 from StandardFile import StandardFile, APPLICATION, FileCache
 from CleanerBase import FolderCT, FileCT

@@ -5,11 +5,11 @@ block_cipher = None
 
 
 a = Analysis(
-    ['ImageCleanUI.py', 'backend/cleaner.py', 'backend/image_clean.py'],
-    pathex=[],
+    ['ImageCleanUI.py',],
+    pathex=['.'],
     binaries=[],
-    datas=[('photomanager.kv', '.'), ('backend', 'backend')],
-    hiddenimports=[],
+    datas=[('photomanager.kv', '.'), ('.venv/lib/python3.12/site-packages/pyheif/data/version.txt', 'pyheif/data')],
+    hiddenimports=['_cffi_backend',],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

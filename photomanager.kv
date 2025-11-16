@@ -182,7 +182,7 @@
         CheckBoxItem:
             id: cb_small
             size_hint_y: .15
-            text: "Look for thumbnails - If you find tiny images,  moved them to a dedicated 'small' folder!"
+            text: "Look for thumbnails - If you find tiny images,  moved them to a dedicated 'small' folder! (SLOW)"
             check_value: self.value_process_small()
             callback: self.set_process_small
         CheckBoxItem:
@@ -192,11 +192,25 @@
             check_value: self.value_do_convert()
             callback: self.set_do_convert
         CheckBoxItem:
-            id: import_folders
+            id: cb_fix_date
             size_hint_y: .15
-            text: "Preserve folders names - On image import, check for descriptive folder names vs just using dates"
-            check_value: self.value_set_folders()
-            callback: self.set_check_folders
+            text: "When processing input folder, if an image date is not found, set it based on file's time stamp. (DANGEROUS)"
+            check_value: self.value_fix_date()
+            callback: self.set_fix_date()
+        CheckBoxItem:
+            id: cb_match_date
+            size_hint_y: .15
+            text: "When processing input folder, set the file's timestamp based on the image's timestamp (if any). (SLOW)"
+            check_value: self.value_fix_date()
+            callback: self.set_fix_date()
+        CheckBoxItem:
+            id: cb_data
+            size_hint_y: .15
+            text: "When processing the input folder, also collect and store non-image files based on Year/Month values"
+            check_value: self.value_datas()
+            callback: self.set_datas()
+
+
 
 <Progress>:
     size_hint: 1, .725

@@ -22,7 +22,7 @@ sys.path.append('.')  # required to satisfy imports of backend
 
 from CleanerBase import APPLICATION, config_dir, user_dir, log_dir
 from StandardFile import StandardFile
-from ImageClean import ImageClean  # DESCRIPTION, EXTRA_HELP
+from cleaner_app import CleanerApp  # DESCRIPTION, EXTRA_HELP
 
 
 DESCRIPTION = 'This application will reorganize image/data files into a folder structure that is human friendly'
@@ -59,7 +59,7 @@ async def run(app):  # pragma: no cover
     await app.run()
 
 
-def main() -> ImageClean:
+def main() -> CleanerApp:
     """
     Main program
     :return: None
@@ -87,7 +87,8 @@ def main() -> ImageClean:
     args_dict = vars(args)
     args_dict['restore'] = False
     logger.debug('%s' % args_dict)
-    return ImageClean(**args_dict)
+    ic = CleanerApp()
+    return CleanerApp(**args_dict)
 
 
 if __name__ == '__main__':  # pragma: no cover

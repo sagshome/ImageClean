@@ -40,14 +40,14 @@ if __name__ == '__main__':  # pragma: no cover
             exec(code, dict(__file__=activate_this))  # pylint: disable=exec-used
 
     os.chdir(project_path)
-    result = os.system('coverage run -m pytest backend Utilities .')
+    result = os.system('coverage run -m pytest Utilities .')
 
     # os.system('pylint backend Utilities cmdline.py ImageCleanUI.py')
     result += os.system('pylint backend Utilities cmdline.py')
     result += os.system('coverage report --fail-under=100 -m')
     if result == 0 or force:  # Pyinstaller fails when running fake ubuntu - Minimum required OpenGL version (2.0) NOT found!
-        result += os.system('pyinstaller --clean cleaner_cron.spec')
-        result += os.system(f'pyinstaller --clean {installer}')
+        result += os.system('pyinstaller --clean data/cleaner_cron.spec')
+        result += os.system(f'pyinstaller --clean data/{installer}')
     if result != 0:
         print('Build Failed')
     sys.exit(result)

@@ -5,7 +5,6 @@ import asyncio
 import logging
 import os
 import platform
-import platformdirs
 import sys
 import types
 
@@ -31,42 +30,35 @@ from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 from kivy.core.window import Window
 
-sys.path.append('.') # required to satisfy imports of backend
-from backend.cleaner import FileCleaner, Folder, APPLICATION, AUTHOR, VERSION  # pylint: disable=import-error
-from ImageClean import ImageClean  # pylint: disable=import-error
+# sys.path.append('.') # required to satisfy imports of backend
+from CleanerBase import APPLICATION, user_dir, config_dir, log_dir
+from StandardFile import StandardFile
+from Folder import Folder
+from cleaner_app import CleanerApp  # pylint: disable=import-error
 
 if platform.system() == 'Windows':
-    import win32timezone
+    pass
 
 Window.size = (1000, 600)
 
-user_data_dir = Path(platformdirs.user_data_dir(APPLICATION, AUTHOR, VERSION))
-user_data_dir.mkdir(parents=True, exist_ok=True)
-config_data_dir = Path(platformdirs.user_config_dir(APPLICATION, AUTHOR, VERSION))
-config_data_dir.mkdir(parents=True, exist_ok=True)
-log_data_dir = Path(platformdirs.user_log_dir(APPLICATION, AUTHOR, VERSION))
-log_data_dir.mkdir(parents=True, exist_ok=True)
+run_path = user_dir()
+conf_file = config_dir().joinpath('config.pickle')
+log_file = log_dir().joinpath(f'{APPLICATION}.log')
 
-run_path = user_data_dir
-conf_file = config_data_dir.joinpath('config.pickle')
-log_file = log_data_dir.joinpath(f'{APPLICATION}.log')
-
-if not run_path.exists():
-    os.mkdir(run_path)
-
+print (run_path, config_dir(), log_dir())
 if log_file.exists() and os.stat(log_file).st_size > 100000:  # pragma: no cover
-    FileCleaner.rollover_file(log_file)
+    StandardFile.rollover_file(log_file)
 
 results_file = run_path.joinpath(f'{APPLICATION}.results')
 
 if results_file.exists():
     results_file.unlink()
-    FileCleaner.rollover_file(results_file)
+    StandardFile.rollover_file(results_file)
 
 RESULTS = open(results_file, "w+")  # pylint: disable=consider-using-with
 
 if log_file.exists() and os.stat(log_file).st_size > 100000:
-    FileCleaner.rollover_file(log_file)
+    StandardFile.rollover_file(log_file)
 
 debugging = os.getenv(f'{APPLICATION.upper()}_DEBUG')
 logger = logging.getLogger(APPLICATION)
@@ -75,10 +67,8 @@ fh = logging.FileHandler(filename=str(log_file))
 fh_formatter = logging.Formatter('%(asctime)s %(levelname)s %(lineno)d:%(filename)s- %(message)s')
 fh.setFormatter(fh_formatter)
 logger.addHandler(fh)
-
-
 # The App will run in the background,  value and queue are used for some basic info passing
-cleaner_app = ImageClean(restore=True, parallel=True)  # save options over each run
+cleaner_app = CleanerApp(restore=True, parallel=True)  # save options over each run
 mp_processed_value = Value("i", 0)
 mp_input_count = Value("i", -1)
 mp_output_count = Value("i", -1)
@@ -114,7 +104,6 @@ def get_drives() -> dict:
 
 
 def calculate_size(path, which):
-    from datetime import datetime
     which.value = -1  # -1 is a test for uninitialized
     value = 0
     for base, dirs, files in os.walk(path):
@@ -215,19 +204,19 @@ class CheckBoxItem(BoxLayout):
 
     @staticmethod
     def set_keep_originals(touch):
-        cleaner_app.keep_original_files = touch
+        cleaner_app.remove = not touch
 
     @staticmethod
     def value_keep_originals():
-        return cleaner_app.keep_original_files
+        return not cleaner_app.remove
 
     @staticmethod
     def set_process_small(touch):
-        cleaner_app.check_for_small = touch
+        cleaner_app.small = touch
 
     @staticmethod
     def value_process_small():
-        return cleaner_app.check_for_small
+        return cleaner_app.small
 
     @staticmethod
     def set_do_convert(touch):
@@ -238,13 +227,28 @@ class CheckBoxItem(BoxLayout):
         return cleaner_app.convert
 
     @staticmethod
-    def set_check_folders(touch):
-        cleaner_app.check_for_folders = touch
+    def set_fix_date(touch):
+        cleaner_app.fix_date = touch
 
     @staticmethod
-    def value_set_folders():
-        return cleaner_app.check_for_folders
+    def value_fix_date():
+        return cleaner_app.fix_date
 
+    @staticmethod
+    def set_match_date(touch):
+        cleaner_app.match_date = touch
+
+    @staticmethod
+    def value_match_date():
+        return cleaner_app.match_date
+
+    @staticmethod
+    def set_datas(touch):
+        cleaner_app.data = touch
+
+    @staticmethod
+    def value_datas():
+        return cleaner_app.data
 
 class Options(BoxLayout):
     pass
@@ -557,7 +561,7 @@ class Main(FloatLayout):
         :param touch: set or cleared
         :return:
         """
-        cleaner_app.set_keep_original_files(touch)
+        cleaner_app.remove(not touch)
         logger.debug('Keep original is %s', touch)
 
     def log_hit(checkbox, value):

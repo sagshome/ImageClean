@@ -5,11 +5,11 @@ block_cipher = None
 
 
 a = Analysis(
-    ['cmdline.py', 'ImageClean.py', 'CleanerBase.py', 'StandardFile.py', 'ImageFile.py', 'Folder.py' ],
-    pathex=[],
+    ['cmdline.py',],
+    pathex=['.'],
     binaries=[],
-    # datas=[('backend', 'backend'),],
-    hiddenimports=[],  # Add your modules here
+    datas=[('.venv/lib/python3.12/site-packages/pyheif/data/version.txt', 'pyheif/data'),],
+    hiddenimports=['_cffi_backend',],  # Add your modules here
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

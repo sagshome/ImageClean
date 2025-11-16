@@ -24,9 +24,11 @@ from unittest import TestCase
 
 import piexif
 
-# pylint: disable=import-error
-from backend.cleaner import ImageCleaner, CleanerBase, FileCleaner, \
-    make_cleaner_object, output_files, PICTURE_FILES, MOVIE_FILES
+from cleaner_app import CleanerApp
+from CleanerBase import CleanerBase, PICTURE_FILES, MOVIE_FILES
+from Folder import Folder
+from StandardFile import StandardFile
+from ImageFile import ImageFile
 from Utilities.test_utilities import copy_file, create_file, create_image_file, set_date, count_files, DATE_SPEC
 
 
