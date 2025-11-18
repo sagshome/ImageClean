@@ -5,13 +5,15 @@ from sqlalchemy.orm import Session
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QPushButton, QSplitter, QLabel, QTableWidget,
-    QTableWidgetItem, QFileDialog, QHBoxLayout, QMessageBox
+    QTableWidgetItem, QFileDialog, QHBoxLayout, QMessageBox, QVBoxLayout
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
+from CleanerBase import APPLICATION
+from cleaner_app import CleanerApp
 # --- replace with your actual model ---
 # from mymodels import FileModel, engine
 
@@ -27,7 +29,13 @@ def get_all_files(root: str) -> set[str]:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("DB vs Filesystem Checker")
+        self.cleaner_app = CleanerApp(restore=True)
+        if not self.cleaner_app.input_folder:
+            self.cleaner_app.input_folder = Path().home()
+        if not self.cleaner_app.output_folder:
+            self.cleaner_app.output_folder = self.cleaner_app.input_folder
+
+        self.setWindowTitle(APPLICATION)
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -51,6 +59,12 @@ class MainWindow(QMainWindow):
 
         # Splitter: table left | preview right
         splitter = QSplitter(Qt.Horizontal)
+
+        self.config_row = QHBoxLayout()
+        self.input_btn = QPushButton("new")
+        # self.input_btn.clicked.connect(self.input_btn)
+        self.config_row.addWidget(self.input_btn)
+        layout.addLayout(self.config_row)
 
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Path", "Status"])
@@ -80,7 +94,7 @@ class MainWindow(QMainWindow):
         self.root_folder = str(Path.home())
 
     def choose_root(self):
-        folder = QFileDialog.getExistingDirectory(self, "Choose Root Folder", self.root_folder)
+        folder = QFileDialog.getExistingDirectory(self, "Choose blah blah Folder", str(self.cleaner_app.output_folder))
         if folder:
             self.root_folder = folder
 
